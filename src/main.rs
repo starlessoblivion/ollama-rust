@@ -1,4 +1,43 @@
 #[cfg(feature = "ssr")]
+#[tokio::main]
+async fn main() {
+    use ax_ollama::app::*; // Replace ax_ollama with your actual crate name if different
+    use ax_ollama::fileserv::file_and_error_handler;
+    use axum::routing::post;
+    use axum::Router;
+    use leptos::prelude::*;
+    use leptos_axum::{generate_route_list, LeptosRoutes};
+
+    let conf = get_configuration(None).unwrap();
+    let addr = conf.leptos_options.site_addr;
+    let leptos_options = conf.leptos_options;
+    let routes = generate_route_list(App);
+
+    // Build our application with routes
+    let app = Router::new()
+    // REGISTER THE STREAMING ROUTE HERE
+    .route("/api/stream", post(stream_handler))
+    .leptos_routes(&leptos_options, routes, {
+        let leptos_options = leptos_options.clone();
+        move || shell(leptos_options.clone())
+    })
+    .fallback(file_and_error_handler)
+    .with_state(leptos_options);
+
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    logging::log!("listening on http://{}", &addr);
+    axum::serve(listener, app).await.unwrap();
+}
+
+// Ensure this struct matches what your frontend sends
+#[cfg(feature = "ssr")]
+#[derive(serde::Deserialize)]
+pub struct PromptRequest {
+    pub model: String,
+    pub prompt: String,
+}
+
+#[cfg(feature = "ssr")]
 async fn stream_handler(
     axum::extract::State(_state): axum::extract::State<leptos::prelude::LeptosOptions>,
                         axum::Json(payload): axum::Json<PromptRequest>,
@@ -32,6 +71,7 @@ async fn stream_handler(
                         if let Some(text) = json["response"].as_str() {
                             yield Ok(axum::response::sse::Event::default().data(text));
                         }
+                        // Check if Ollama is finished
                         if json["done"].as_bool().unwrap_or(false) {
                             yield Ok(axum::response::sse::Event::default().data("__END__"));
                         }
@@ -47,4 +87,10 @@ async fn stream_handler(
             axum::response::sse::Sse::new(error_stream)
         }
     }
+}
+
+// Fallback for non-SSR compilation
+#[cfg(not(feature = "ssr"))]
+pub fn main() {
+    // No-op for client-side
 }
