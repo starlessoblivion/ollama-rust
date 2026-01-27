@@ -1,54 +1,3 @@
-#!/bin/bash
-# Ollama-Rust Universal Installer (Leptos Fullstack Edition)
-
-# 1. Environment Detection
-if command -v pkg &> /dev/null && [ -d "/data/data/com.termux" ]; then
-    OS="termux"
-    INSTALL_CMD="pkg install -y"
-    UPDATE_CMD="pkg update -y && pkg upgrade -y"
-    PKGS="git rust binutils build-essential openssl openssl-tool binaryen"
-    OPENSSL_PATH=$PREFIX
-elif command -v pacman &> /dev/null; then
-    OS="arch"
-    INSTALL_CMD="sudo pacman -S --needed --noconfirm"
-    UPDATE_CMD="sudo pacman -Syu --noconfirm"
-    PKGS="git rust binutils base-devel openssl binaryen"
-    OPENSSL_PATH="/usr"
-else
-    # Defaulting to apt-based for other common distros
-    OS="debian-like"
-    INSTALL_CMD="sudo apt-get install -y"
-    UPDATE_CMD="sudo apt-get update"
-    PKGS="git rustc cargo binutils build-essential libssl-dev pkg-config binaryen"
-    OPENSSL_PATH="/usr"
-fi
-
-echo "-------------------------------------------"
-echo "System: $OS | Installing dependencies..."
-eval "$UPDATE_CMD" || true
-eval "$INSTALL_CMD $PKGS"
-
-# 2. Toolchain Setup
-rustup target add wasm32-unknown-unknown 2>/dev/null
-if ! command -v cargo-leptos &> /dev/null; then
-    cargo install --locked cargo-leptos
-fi
-
-# 3. Repository & Directory Setup
-if [ ! -d "$HOME/ollama-rust" ]; then
-    git clone https://github.com/starlessoblivion/ollama-rust.git "$HOME/ollama-rust"
-fi
-cd "$HOME/ollama-rust" || exit
-mkdir -p public
-[ -f style.css ] && mv style.css public/
-
-# ---------------------------------------------------------
-# 4. FIXING THE CODE (The "Everything in install.sh" part)
-# ---------------------------------------------------------
-echo "Applying critical code fixes..."
-
-# 4.1 Re-write Cargo.toml to ensure deps are perfect
-cat <<EOF > Cargo.toml
 [package]
 name = "ollama-rust"
 version = "0.1.0"
@@ -58,14 +7,19 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# Standard Leptos Stack
 leptos = { version = "0.7", features = ["nightly"] }
 leptos_axum = { version = "0.7", optional = true }
 leptos_meta = { version = "0.7" }
 leptos_router = { version = "0.7" }
+
+# Serialization & WASM
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 wasm-bindgen = "0.2"
 js-sys = "0.3"
+
+# Networking & Utilities
 reqwest = { version = "0.12", features = ["json", "stream"] }
 futures = "0.3"
 async-stream = "0.3"
@@ -73,6 +27,8 @@ tokio-util = { version = "0.7", features = ["codec", "io"] }
 console_error_panic_hook = "0.1"
 console_log = "1.0"
 log = "0.4"
+
+# Backend logic
 axum = { version = "0.7", features = ["macros"], optional = true }
 tokio = { version = "1.0", features = ["full"], optional = true }
 tower = { version = "0.4", optional = true }
@@ -100,36 +56,3 @@ assets-dir = "public"
 site-addr = "0.0.0.0:3000"
 bin-features = ["ssr"]
 lib-features = ["hydrate"]
-EOF
-
-# 4.2 Fix app.rs Traits (E0277)
-# This inserts the necessary Serde derives before your structs
-sed -i 's/pub struct StatusResponse/#[derive(Serialize, Deserialize, Clone, Debug)]\npub struct StatusResponse/' src/app.rs
-sed -i 's/pub struct ChatMessage/#[derive(Serialize, Deserialize, Clone, Debug)]\npub struct ChatMessage/' src/app.rs
-
-# 4.3 Fix Leptos 0.7 Reactive Syntax (E0277/E0599)
-# Corrects the property value binding to use a closure
-sed -i 's/prop:value=input/prop:value=move || input.get()/' src/app.rs
-
-# 4.4 Fix Dispatch return type (E0308)
-# Discards the return value of dispatch() by wrapping in braces with a semicolon
-sed -i 's/on:change=move |_| toggle_action.dispatch(())$/on:change=move |_| { toggle_action.dispatch(()); }/' src/app.rs
-
-# ---------------------------------------------------------
-# 5. Build and Launch
-# ---------------------------------------------------------
-export OPENSSL_DIR=$OPENSSL_PATH
-export LDFLAGS="-L$OPENSSL_PATH/lib"
-export CPPFLAGS="-I$OPENSSL_PATH/include"
-
-echo "Building project..."
-cargo leptos build --release
-
-# Create runner
-echo "#!/bin/bash
-export LEPTOS_SITE_ROOT=\"\$HOME/ollama-rust/target/site\"
-cd \$HOME/ollama-rust
-./target/release/ollama-rust" > ~/run-ollama.sh
-chmod +x ~/run-ollama.sh
-
-echo "Setup Complete! Launch with ~/run-ollama.sh"

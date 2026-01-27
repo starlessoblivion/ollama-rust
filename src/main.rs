@@ -1,8 +1,8 @@
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
-    use ax_ollama::app::*; // Replace ax_ollama with your actual crate name if different
-    use ax_ollama::fileserv::file_and_error_handler;
+    // Ensure this matches the 'name' field in your Cargo.toml
+    use ollama_rust::app::*;
     use axum::routing::post;
     use axum::Router;
     use leptos::prelude::*;
@@ -13,15 +13,12 @@ async fn main() {
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
 
-    // Build our application with routes
     let app = Router::new()
-    // REGISTER THE STREAMING ROUTE HERE
     .route("/api/stream", post(stream_handler))
     .leptos_routes(&leptos_options, routes, {
         let leptos_options = leptos_options.clone();
         move || shell(leptos_options.clone())
     })
-    .fallback(file_and_error_handler)
     .with_state(leptos_options);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
@@ -29,7 +26,6 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-// Ensure this struct matches what your frontend sends
 #[cfg(feature = "ssr")]
 #[derive(serde::Deserialize)]
 pub struct PromptRequest {
@@ -71,7 +67,6 @@ async fn stream_handler(
                         if let Some(text) = json["response"].as_str() {
                             yield Ok(axum::response::sse::Event::default().data(text));
                         }
-                        // Check if Ollama is finished
                         if json["done"].as_bool().unwrap_or(false) {
                             yield Ok(axum::response::sse::Event::default().data("__END__"));
                         }
@@ -89,8 +84,5 @@ async fn stream_handler(
     }
 }
 
-// Fallback for non-SSR compilation
 #[cfg(not(feature = "ssr"))]
-pub fn main() {
-    // No-op for client-side
-}
+pub fn main() {}
