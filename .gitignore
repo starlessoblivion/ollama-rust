@@ -1,4 +1,1 @@
-echo "target/" >> .gitignore
-git add .
-git commit -m "Migrated Ollama GUI to Rust/Axum"
-git push origin master
+target/
