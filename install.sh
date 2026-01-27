@@ -14,7 +14,12 @@ elif command -v pacman &> /dev/null; then
     OS="arch"
     INSTALL_CMD="sudo pacman -S --needed --noconfirm"
     UPDATE_CMD="sudo pacman -Syu --noconfirm"
-    PKGS="git rust binutils base-devel openssl binaryen"
+    # RESTORED: Only install 'rust' if 'cargo' is missing to avoid rustup conflicts
+    if command -v cargo &> /dev/null; then
+        PKGS="git binutils base-devel openssl binaryen"
+    else
+        PKGS="git rust binutils base-devel openssl binaryen"
+    fi
     OPENSSL_PATH="/usr"
 elif command -v dnf &> /dev/null; then
     OS="fedora"
@@ -44,8 +49,11 @@ eval "$INSTALL_CMD $PKGS"
 
 # 2. WASM Toolchain Setup
 echo "Configuring Rust for Fullstack (WASM)..."
-rustup target add wasm32-unknown-unknown
+# Ensure the wasm target is present for the frontend
+rustup target add wasm32-unknown-unknown 2>/dev/null || echo "WASM target already present or rustup not used."
+
 if ! command -v cargo-leptos &> /dev/null; then
+    echo "Installing cargo-leptos..."
     cargo install --locked cargo-leptos
 fi
 
