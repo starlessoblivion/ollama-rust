@@ -3,13 +3,55 @@ name = "ollama-rust"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
-axum = { version = "0.7", features = ["macros"] }
-tokio = { version = "1.0", features = ["full"] }
-tokio-util = { version = "0.7", features = ["codec"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tower-http = { version = "0.5", features = ["fs", "cors"] }
-reqwest = { version = "0.11", features = ["json", "stream"] }
-futures = "0.3"
-async-stream = "0.3"
+# Standard Leptos Stack
+leptos = { version = "0.8", features = ["nightly"] }
+leptos_axum = { version = "0.8", optional = true }
+leptos_meta = { version = "0.8" }
+leptos_router = { version = "0.8" }
+
+# Add these for the browser console logging in lib.rs
+console_error_panic_hook = "0.1"
+console_log = "1.0"
+log = "0.4"
+
+# Backend logic
+axum = { version = "0.7", features = ["macros"], optional = true }
+tokio = { version = "1.0", features = ["full"], optional = true }
+tower = { version = "0.4", optional = true }
+tower-http = { version = "0.5", features = ["fs", "cors"], optional = true }
+# ... keep your other dependencies (serde, reqwest, etc.) ...
+
+[features]
+hydrate = ["leptos/hydrate"]
+ssr = [
+    "dep:axum",
+    "dep:tokio",
+    "dep:tower",
+    "dep:tower-http",
+    "dep:leptos_axum",
+    "leptos/ssr",
+    "leptos_meta/ssr",
+    "leptos_router/ssr",
+]
+
+[package.metadata.leptos]
+# The name used for output WASM and JS files
+output-name = "ollama-rust"
+# The site root folder (where the server serves from)
+site-root = "target/site"
+# The folder within site-root where JS/WASM/CSS are kept
+site-pkg-dir = "pkg"
+# The path to your actual CSS file (relative to Cargo.toml)
+style-file = "public/style.css"
+# The folder where static assets (images, fonts) are kept
+assets-dir = "public"
+# The address the server listens on
+site-addr = "0.0.0.0:3000"
+# Which features to use when building the server binary
+bin-features = ["ssr"]
+# Which features to use when building the WASM frontend
+lib-features = ["hydrate"]
