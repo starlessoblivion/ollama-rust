@@ -4,7 +4,7 @@ A lightweight Rust-based web interface for Ollama, optimized for desktop and mob
 
 ## Android (Termux) Quick Start
 
-To set up the environment, compile, and run on Android, copy and paste this command into Termux:
+The easiest way to install is to run our automated script. This handles all dependencies, environment variables, and builds the project for you:
 
 ```bash
-pkg update -y && pkg upgrade -y && pkg install -y git rust binutils build-essential openssl openssl-tool && export OPENSSL_DIR=$PREFIX && export LDFLAGS="-L$PREFIX/lib" && export CPPFLAGS="-I$PREFIX/include" && git clone https://github.com/starlessoblivion/ollama-rust.git && cd ollama-rust && cargo build --release
+curl -sSL https://raw.githubusercontent.com/starlessoblivion/ollama-rust/main/install/android.sh | bash
