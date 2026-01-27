@@ -12,47 +12,17 @@ elif command -v pacman &> /dev/null; then
     OS="arch"
     INSTALL_CMD="sudo pacman -S --needed --noconfirm"
     UPDATE_CMD="sudo pacman -Syu --noconfirm"
-    PKGS="git rust binutils base-devel openssl"
+
+    # SMART RUST CHECK:
+    # If 'cargo' or 'rustc' already exists, don't try to install the 'rust' package
+    if command -v cargo &> /dev/null; then
+        echo "Rust is already installed (via rustup or pacman). Skipping rust package..."
+        PKGS="git binutils base-devel openssl"
+    else
+        PKGS="git rust binutils base-devel openssl"
+    fi
     OPENSSL_PATH="/usr"
 else
-    echo "Unsupported environment. This script supports Termux and Arch Linux."
+    echo "Unsupported environment."
     exit 1
 fi
-
-echo "Detected System: $OS"
-echo "Updating and installing dependencies..."
-eval $UPDATE_CMD
-eval $INSTALL_CMD $PKGS
-
-# 1. Get the code
-if [ ! -d "$HOME/ollama-rust" ]; then
-    echo "Cloning ollama-rust..."
-    git clone https://github.com/starlessoblivion/ollama-rust.git "$HOME/ollama-rust"
-fi
-
-# 2. Move into project directory
-cd "$HOME/ollama-rust" || { echo "Failed to enter directory"; exit 1; }
-
-# 3. Setup Environment Variables for Build
-export OPENSSL_DIR=$OPENSSL_PATH
-export LDFLAGS="-L$OPENSSL_PATH/lib"
-export CPPFLAGS="-I$OPENSSL_PATH/include"
-
-echo "Building project (this will take a minute)..."
-cargo build --release
-
-# 4. Create the shortcut
-# We use \$ to ensure variables are evaluated when the shortcut RUNS, not now.
-echo "#!/bin/bash
-export OPENSSL_DIR=$OPENSSL_PATH
-export LDFLAGS=\"-L$OPENSSL_PATH/lib\"
-export CPPFLAGS=\"-I$OPENSSL_PATH/include\"
-cd \$HOME/ollama-rust
-./target/release/ollama-rust" > ~/run-ollama.sh
-
-chmod +x ~/run-ollama.sh
-
-echo "-------------------------------------------"
-echo "Setup Complete!"
-echo "Run the app with: ./run-ollama.sh"
-echo "-------------------------------------------"
