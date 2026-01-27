@@ -1,20 +1,17 @@
 #!/bin/bash
 # Ollama-Rust Universal Installer (Leptos Fullstack Edition)
-# Supports: Termux, Arch, Fedora, Ubuntu, Debian, Raspberry Pi OS
 
 # 1. Environment Detection & Package Configuration
 if command -v pkg &> /dev/null && [ -d "/data/data/com.termux" ]; then
     OS="termux"
     INSTALL_CMD="pkg install -y"
     UPDATE_CMD="pkg update -y && pkg upgrade -y"
-    # Added binaryen for WASM optimization
     PKGS="git rust binutils build-essential openssl openssl-tool binaryen"
     OPENSSL_PATH=$PREFIX
 elif command -v pacman &> /dev/null; then
     OS="arch"
     INSTALL_CMD="sudo pacman -S --needed --noconfirm"
     UPDATE_CMD="sudo pacman -Syu --noconfirm"
-    # RESTORED: Only install 'rust' if 'cargo' is missing to avoid rustup conflicts
     if command -v cargo &> /dev/null; then
         PKGS="git binutils base-devel openssl binaryen"
     else
@@ -43,14 +40,12 @@ echo "Detected System: $OS"
 echo "Updating and installing dependencies..."
 echo "-------------------------------------------"
 
-# Run update and install
 eval "$UPDATE_CMD" || true
 eval "$INSTALL_CMD $PKGS"
 
-# 2. WASM Toolchain Setup
+# 2. WASM Toolchain & Dependencies Setup
 echo "Configuring Rust for Fullstack (WASM)..."
-# Ensure the wasm target is present for the frontend
-rustup target add wasm32-unknown-unknown 2>/dev/null || echo "WASM target already present or rustup not used."
+rustup target add wasm32-unknown-unknown 2>/dev/null || echo "WASM target already present."
 
 if ! command -v cargo-leptos &> /dev/null; then
     echo "Installing cargo-leptos..."
@@ -61,16 +56,34 @@ fi
 if [ ! -d "$HOME/ollama-rust" ]; then
     echo "Cloning ollama-rust..."
     git clone https://github.com/starlessoblivion/ollama-rust.git "$HOME/ollama-rust"
+    cd "$HOME/ollama-rust"
 else
     echo "Existing repository found. Pulling latest changes..."
     cd "$HOME/ollama-rust" && git pull origin main
 fi
 
-cd "$HOME/ollama-rust" || { echo "Failed to enter directory"; exit 1; }
+# --- NEW SECTION: PATCH SOURCE CODE AND DEPENDENCIES ---
+echo "Patching project files and dependencies..."
 
-# Ensure folder structure is correct for Leptos
-mkdir -p public
-[ -f style.css ] && mv style.css public/
+# 3.1 Add missing crates to Cargo.toml if they aren't there
+cargo add serde --features derive
+cargo add wasm-bindgen
+cargo add serde_json
+
+# 3.2 Fix Struct Derives (E0277)
+# Adds Serialize/Deserialize to StatusResponse and ChatMessage
+sed -i 's/pub struct StatusResponse {/#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]\npub struct StatusResponse {/' src/app.rs
+sed -i 's/pub struct ChatMessage {/#[derive(serde::Serialize, serde::Deserialize, Clone)]\npub struct ChatMessage {/' src/app.rs
+
+# 3.3 Fix Leptos 0.7 Reactive Syntax (E0277 / E0599)
+# Wraps 'input' in a closure for prop:value
+sed -i 's/prop:value=input/prop:value=move || input.get()/' src/app.rs
+
+# 3.4 Fix Action Dispatch Return Type (E0308)
+# Adds a semicolon inside the closure to return ()
+sed -i 's/toggle_action.dispatch(())/ { toggle_action.dispatch(()); }/' src/app.rs
+
+# --- END PATCHING ---
 
 # 4. Compilation
 export OPENSSL_DIR=$OPENSSL_PATH
@@ -78,11 +91,9 @@ export LDFLAGS="-L$OPENSSL_PATH/lib"
 export CPPFLAGS="-I$OPENSSL_PATH/include"
 
 echo "Building Fullstack project (Release mode)..."
-# This compiles the server binary AND the WASM frontend
 cargo leptos build --release
 
 # 5. Create Launch Shortcut
-# Added LEPTOS_SITE_ROOT so the binary knows where the WASM/CSS files are
 echo "#!/bin/bash
 export OPENSSL_DIR=$OPENSSL_PATH
 export LDFLAGS=\"-L$OPENSSL_PATH/lib\"
