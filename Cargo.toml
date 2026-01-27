@@ -8,7 +8,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Standard Leptos Stack
-leptos = { version = "0.7", features = ["nightly"] }
+leptos = { version = "0.7" }
 leptos_axum = { version = "0.7", optional = true }
 leptos_meta = { version = "0.7" }
 leptos_router = { version = "0.7" }
