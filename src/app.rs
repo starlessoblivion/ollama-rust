@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use serde::{Deserialize, Serialize}; // Ensure these are available
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -35,14 +35,12 @@ pub fn App() -> impl IntoView {
     let (messages, _set_messages) = signal(Vec::<ChatMessage>::new());
     let (selected_model, _set_selected_model) = signal(Some("llama3".to_string()));
 
-    // In Leptos 0.7, Resources and Actions are often handled via the prelude
     let status_resource = Resource::new(|| (), |_| get_ollama_status());
     let toggle_action = Action::new(|_| toggle_ollama_service());
 
     let send_message = move |_| {
         let text = input.get();
         if text.is_empty() { return; }
-        // ... (rest of your streaming logic)
         set_input.set("".into());
     };
 
@@ -60,7 +58,6 @@ pub fn App() -> impl IntoView {
 
         <textarea
         placeholder="Type your message..."
-        // FIX: In 0.7, properties MUST be wrapped in a closure
         prop:value=move || input.get()
         on:input=move |ev| set_input.set(event_target_value(&ev))
         ></textarea>
