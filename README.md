@@ -2,7 +2,6 @@
 
 A lightweight Rust-based web interface for Ollama, optimized for desktop and mobile browsers.
 
-
 ## Android (Termux) Quick Start
 
 To set up the environment, compile, and run on Android, copy and paste this command into Termux:
