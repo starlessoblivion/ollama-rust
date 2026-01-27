@@ -7,23 +7,33 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# Standard Leptos Stack
-leptos = { version = "0.8", features = ["nightly"] }
-leptos_axum = { version = "0.8", optional = true }
-leptos_meta = { version = "0.8" }
-leptos_router = { version = "0.8" }
-
-# Add these for the browser console logging in lib.rs
-console_error_panic_hook = "0.1"
-console_log = "1.0"
-log = "0.4"
-
-# Backend logic
+leptos = { version = "0.7", features = ["nightly"] }
+leptos_axum = { version = "0.7", optional = true }
+leptos_meta = { version = "0.7" }
+leptos_router = { version = "0.7" }
 axum = { version = "0.7", features = ["macros"], optional = true }
 tokio = { version = "1.0", features = ["full"], optional = true }
 tower = { version = "0.4", optional = true }
 tower-http = { version = "0.5", features = ["fs", "cors"], optional = true }
-# ... keep your other dependencies (serde, reqwest, etc.) ...
+wasm-bindgen = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+futures = "0.3"
+async-stream = "0.3"
+tokio-util = { version = "0.7", features = ["codec", "io"] }
+console_error_panic_hook = "0.1"
+console_log = "1.0"
+log = "0.4"
+
+console_error_panic_hook = "0.1"
+console_log = "1.0"
+log = "0.4"
+
+axum = { version = "0.7", features = ["macros"], optional = true }
+tokio = { version = "1.0", features = ["full"], optional = true }
+tower = { version = "0.4", optional = true }
+tower-http = { version = "0.5", features = ["fs", "cors"], optional = true }
 
 [features]
 hydrate = ["leptos/hydrate"]
@@ -39,19 +49,11 @@ ssr = [
 ]
 
 [package.metadata.leptos]
-# The name used for output WASM and JS files
 output-name = "ollama-rust"
-# The site root folder (where the server serves from)
 site-root = "target/site"
-# The folder within site-root where JS/WASM/CSS are kept
 site-pkg-dir = "pkg"
-# The path to your actual CSS file (relative to Cargo.toml)
 style-file = "public/style.css"
-# The folder where static assets (images, fonts) are kept
 assets-dir = "public"
-# The address the server listens on
 site-addr = "0.0.0.0:3000"
-# Which features to use when building the server binary
 bin-features = ["ssr"]
-# Which features to use when building the WASM frontend
 lib-features = ["hydrate"]
