@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>LLM Selector (Termux GUI)</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="chat-container">
+    <div class="chat-header" id="chat-header">
+      <div class="header-left">
+        <div class="model-dropdown">
+          <button id="model-button" type="button" onclick="toggleModelMenu(event)" aria-haspopup="true" aria-expanded="false">🧠 Model</button>
+
+          <div id="model-menu" class="model-menu hidden" aria-hidden="true">
+            <div class="runner-list">
+              <div class="runner-item" data-runner="ollama" id="runner-ollama" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">
+                <div class="runner-name">ollama</div>
+
+                <div id="models-panel" class="models-panel hidden" aria-hidden="true">
+                  <div id="ollama-models" class="model-submenu">
+                    <!-- models injected by server or client -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="chat-title">🧠</div>
+
+      <div class="header-right">
+        <label class="toggle-switch" title="Toggle Ollama serve">
+          <input type="checkbox" id="ollama-toggle" onchange="toggleOllama()" aria-checked="false" aria-label="Toggle Ollama serve">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div id="chat-window" class="chat-window" aria-live="polite"></div>
+
+    <div class="chat-input-area" id="chat-input-area">
+      <textarea id="prompt-input" placeholder="Type your message..." rows="1" aria-label="Message input"></textarea>
+      <button id="send-button" type="button" aria-label="Send">➤</button>
+    </div>
+  </div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
