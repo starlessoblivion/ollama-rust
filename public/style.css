@@ -553,6 +553,67 @@ body {
     color: var(--text-muted);
 }
 
+.brave-btn-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.brave-save-btn,
+.brave-test-btn {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+    font-family: inherit;
+}
+
+.brave-save-btn {
+    background: var(--accent);
+    color: white;
+}
+
+.brave-save-btn:hover {
+    background: var(--accent-hover);
+}
+
+.brave-test-btn {
+    background: var(--bg-menu-hover);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+
+.brave-test-btn:hover:not(:disabled) {
+    background: var(--border);
+}
+
+.brave-test-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.brave-status {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.8rem;
+    border-radius: 4px;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.brave-status.success {
+    background: rgba(46, 204, 113, 0.15);
+    color: #27ae60;
+}
+
+.brave-status.error {
+    background: rgba(231, 76, 60, 0.15);
+    color: #e74c3c;
+}
+
 .brave-api-link {
     display: block;
     padding: 0.5rem 0.6rem;

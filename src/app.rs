@@ -34,6 +34,102 @@ pub struct ChatMessage {
     pub text: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct BraveSearchResult {
+    pub title: String,
+    pub url: String,
+    pub description: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct BraveSearchResponse {
+    pub success: bool,
+    pub results: Vec<BraveSearchResult>,
+    pub error: Option<String>,
+}
+
+#[server]
+pub async fn brave_search(query: String, api_token: String) -> Result<BraveSearchResponse, ServerFnError> {
+    if api_token.trim().is_empty() {
+        return Ok(BraveSearchResponse {
+            success: false,
+            results: vec![],
+            error: Some("API token is required".to_string()),
+        });
+    }
+
+    let client = reqwest::Client::new();
+    let res = client
+        .get("https://api.search.brave.com/res/v1/web/search")
+        .header("X-Subscription-Token", api_token.trim())
+        .header("Accept", "application/json")
+        .query(&[("q", query.as_str()), ("count", "5")])
+        .send()
+        .await;
+
+    match res {
+        Ok(response) => {
+            if response.status().is_success() {
+                if let Ok(json) = response.json::<serde_json::Value>().await {
+                    let results: Vec<BraveSearchResult> = json["web"]["results"]
+                        .as_array()
+                        .map(|arr| {
+                            arr.iter()
+                                .take(5)
+                                .filter_map(|r| {
+                                    Some(BraveSearchResult {
+                                        title: r["title"].as_str()?.to_string(),
+                                        url: r["url"].as_str()?.to_string(),
+                                        description: r["description"].as_str().unwrap_or("").to_string(),
+                                    })
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    return Ok(BraveSearchResponse {
+                        success: true,
+                        results,
+                        error: None,
+                    });
+                }
+            } else {
+                let status = response.status();
+                let error_msg = if status.as_u16() == 401 {
+                    "Invalid API token".to_string()
+                } else if status.as_u16() == 429 {
+                    "Rate limit exceeded".to_string()
+                } else {
+                    format!("API error: {}", status)
+                };
+                return Ok(BraveSearchResponse {
+                    success: false,
+                    results: vec![],
+                    error: Some(error_msg),
+                });
+            }
+        }
+        Err(e) => {
+            return Ok(BraveSearchResponse {
+                success: false,
+                results: vec![],
+                error: Some(format!("Request failed: {}", e)),
+            });
+        }
+    }
+
+    Ok(BraveSearchResponse {
+        success: false,
+        results: vec![],
+        error: Some("Unknown error".to_string()),
+    })
+}
+
+#[server]
+pub async fn test_brave_api(api_token: String) -> Result<BraveSearchResponse, ServerFnError> {
+    brave_search("test query".to_string(), api_token).await
+}
+
 #[server]
 pub async fn get_hostname() -> Result<String, ServerFnError> {
     // Try to get hostname from system
@@ -578,6 +674,8 @@ pub fn App() -> impl IntoView {
     let (brave_search_enabled, set_brave_search_enabled) = signal(false);
     let (brave_api_token, set_brave_api_token) = signal(String::new());
     let (brave_submenu_open, set_brave_submenu_open) = signal(false);
+    let (brave_test_status, set_brave_test_status) = signal::<Option<String>>(None);
+    let (brave_test_pending, set_brave_test_pending) = signal(false);
 
     // Cloud state
     let (cloud_panel_open, set_cloud_panel_open) = signal(false);
@@ -953,7 +1051,9 @@ pub fn App() -> impl IntoView {
 
         // Start streaming
         let model = selected_model.get().unwrap();
-        let prompt = text.clone();
+        let user_query = text.clone();
+        let search_enabled = brave_search_enabled.get();
+        let api_token = brave_api_token.get();
 
         #[cfg(target_arch = "wasm32")]
         {
@@ -963,6 +1063,34 @@ pub fn App() -> impl IntoView {
             // Use fetch with SSE
             wasm_bindgen_futures::spawn_local(async move {
                 let window = web_sys::window().unwrap();
+
+                // Build the prompt - optionally with search results
+                let prompt = if search_enabled && !api_token.trim().is_empty() {
+                    // First, perform web search
+                    match brave_search(user_query.clone(), api_token).await {
+                        Ok(search_response) if search_response.success && !search_response.results.is_empty() => {
+                            // Build context from search results
+                            let mut context = String::from("I searched the web for your question. Here are the relevant results:\n\n");
+                            for (i, result) in search_response.results.iter().enumerate() {
+                                context.push_str(&format!(
+                                    "{}. **{}**\n   URL: {}\n   {}\n\n",
+                                    i + 1,
+                                    result.title,
+                                    result.url,
+                                    result.description
+                                ));
+                            }
+                            context.push_str(&format!(
+                                "---\nBased on the above web search results, please answer the following question:\n\n{}",
+                                user_query
+                            ));
+                            context
+                        }
+                        _ => user_query.clone() // Fall back to original query if search fails
+                    }
+                } else {
+                    user_query.clone()
+                };
 
                 let opts = web_sys::RequestInit::new();
                 opts.set_method("POST");
@@ -1621,6 +1749,32 @@ pub fn App() -> impl IntoView {
                                                 on:input=move |ev| {
                                                     let token = event_target_value(&ev);
                                                     set_brave_api_token.set(token.clone());
+                                                    set_brave_test_status.set(None);
+                                                }
+                                                on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()
+                                                on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                                    ev.stop_propagation();
+                                                    if ev.key() == "Enter" {
+                                                        let token = brave_api_token.get();
+                                                        #[cfg(target_arch = "wasm32")]
+                                                        {
+                                                            if let Some(window) = web_sys::window() {
+                                                                if let Ok(Some(storage)) = window.local_storage() {
+                                                                    let _ = storage.set_item("brave_api_token", &token);
+                                                                }
+                                                            }
+                                                        }
+                                                        set_brave_test_status.set(Some("Saved!".to_string()));
+                                                    }
+                                                }
+                                            />
+                                        </div>
+                                        <div class="brave-btn-row">
+                                            <button
+                                                class="brave-save-btn"
+                                                on:click=move |ev: web_sys::MouseEvent| {
+                                                    ev.stop_propagation();
+                                                    let token = brave_api_token.get();
                                                     #[cfg(target_arch = "wasm32")]
                                                     {
                                                         if let Some(window) = web_sys::window() {
@@ -1629,10 +1783,54 @@ pub fn App() -> impl IntoView {
                                                             }
                                                         }
                                                     }
-                                                }
-                                                on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()
-                                            />
+                                                    set_brave_test_status.set(Some("Saved!".to_string()));
+                                                }>
+                                                "Save"
+                                            </button>
+                                            <button
+                                                class="brave-test-btn"
+                                                prop:disabled=move || brave_test_pending.get()
+                                                on:click=move |ev: web_sys::MouseEvent| {
+                                                    ev.stop_propagation();
+                                                    let token = brave_api_token.get();
+                                                    if token.trim().is_empty() {
+                                                        set_brave_test_status.set(Some("Enter token first".to_string()));
+                                                        return;
+                                                    }
+                                                    set_brave_test_pending.set(true);
+                                                    set_brave_test_status.set(Some("Testing...".to_string()));
+                                                    spawn_local(async move {
+                                                        match test_brave_api(token).await {
+                                                            Ok(response) => {
+                                                                if response.success {
+                                                                    set_brave_test_status.set(Some("API working!".to_string()));
+                                                                } else {
+                                                                    set_brave_test_status.set(Some(response.error.unwrap_or("Failed".to_string())));
+                                                                }
+                                                            }
+                                                            Err(e) => {
+                                                                set_brave_test_status.set(Some(format!("Error: {}", e)));
+                                                            }
+                                                        }
+                                                        set_brave_test_pending.set(false);
+                                                    });
+                                                }>
+                                                {move || if brave_test_pending.get() { "..." } else { "Test" }}
+                                            </button>
                                         </div>
+                                        // Status message
+                                        {move || {
+                                            brave_test_status.get().map(|status| {
+                                                let is_success = status.contains("working") || status.contains("Saved");
+                                                view! {
+                                                    <div class="brave-status"
+                                                         class:success=is_success
+                                                         class:error=!is_success>
+                                                        {status}
+                                                    </div>
+                                                }
+                                            })
+                                        }}
                                         <a href="https://brave.com/search/api/"
                                            target="_blank"
                                            rel="noopener noreferrer"
