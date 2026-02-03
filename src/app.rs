@@ -137,15 +137,22 @@ pub async fn start_model_pull(model_name: String) -> Result<PullProgress, Server
                                 let total = json["total"].as_u64().unwrap_or(0);
                                 let completed = json["completed"].as_u64().unwrap_or(0);
 
+                                // Get previous values to preserve if needed
+                                let prev = map.get(&model_clone).cloned();
+                                let prev_speed = prev.as_ref().map(|p| p.speed.clone()).unwrap_or_default();
+                                let prev_percent = prev.as_ref().map(|p| p.percent).unwrap_or(0.0);
+
                                 let percent = if total > 0 {
                                     (completed as f32 / total as f32) * 100.0
                                 } else {
-                                    0.0
+                                    prev_percent // Keep previous percent if no new data
                                 };
 
-                                // Calculate speed from completed bytes
-                                let speed = if total > 0 && completed > 0 && completed < total {
+                                // Calculate speed from completed bytes, keep previous if no new data
+                                let speed = if total > 0 && completed > 0 {
                                     format_bytes(completed) + " / " + &format_bytes(total)
+                                } else if !prev_speed.is_empty() {
+                                    prev_speed // Keep previous speed
                                 } else {
                                     "".to_string()
                                 };
