@@ -691,7 +691,7 @@ pub fn App() -> impl IntoView {
                                                                                             ev.stop_propagation();
                                                                                             do_delete_model(m_delete.clone());
                                                                                         }>
-                                                                                        {if is_deleting() { "..." } else { "🗑" }}
+                                                                                        {if is_deleting() { "..." } else { "❌" }}
                                                                                     </button>
                                                                                 </div>
                                                                             }
