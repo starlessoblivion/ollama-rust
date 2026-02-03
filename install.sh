@@ -83,29 +83,13 @@ install_rust() {
     if command -v rustc &> /dev/null; then
         print_warning "Found rustc $(rustc --version) but no rustup"
         print_warning "rustup is required to add the WASM target"
-        echo ""
-        print_status "Options:"
-        echo "  1. Install rustup alongside (recommended):"
-        echo "     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-        echo ""
-        echo "  2. On Termux, replace pkg rust with rustup:"
-        echo "     pkg uninstall rust"
-        echo "     Then re-run this installer"
-        echo ""
-        print_status "Would you like to install rustup now? [y/N] "
-        read -r response
-        if [[ "$response" =~ ^[Yy]$ ]]; then
-            print_status "Installing rustup..."
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-            if [ -f "$HOME/.cargo/env" ]; then
-                source "$HOME/.cargo/env"
-            fi
-            print_success "Rustup installed"
-            return 0
-        else
-            print_error "rustup is required. Please install it and re-run."
-            exit 1
+        print_status "Installing rustup alongside existing rust..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+        if [ -f "$HOME/.cargo/env" ]; then
+            source "$HOME/.cargo/env"
         fi
+        print_success "Rustup installed"
+        return 0
     fi
 
     # Neither rustup nor rustc found - install rustup
