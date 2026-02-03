@@ -71,6 +71,12 @@ install_rust() {
         source "$HOME/.cargo/env"
     fi
 
+    # Fix for Android/Termux SSL issues with rustup
+    if [ "$IS_TERMUX" = true ]; then
+        export RUSTUP_USE_CURL=1
+        export CARGO_HTTP_CHECK_REVOKE=false
+    fi
+
     # Check if rustup is available
     if command -v rustup &> /dev/null; then
         # Ensure a default toolchain is set
