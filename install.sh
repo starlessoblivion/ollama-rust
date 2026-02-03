@@ -46,7 +46,7 @@ install_dependencies() {
     if [ "$IS_TERMUX" = true ]; then
         # Termux - install base deps
         pkg update -y
-        pkg install -y git openssl pkg-config binutils
+        pkg install -y git openssl pkg-config binutils ca-certificates
     elif command -v apt-get &> /dev/null; then
         # Debian/Ubuntu
         sudo apt-get update
@@ -75,18 +75,36 @@ install_rust() {
     if [ "$IS_TERMUX" = true ]; then
         export RUSTUP_USE_CURL=1
         export CARGO_HTTP_CHECK_REVOKE=false
+        # Set SSL cert path for Termux
+        if [ -f "$PREFIX/etc/tls/cert.pem" ]; then
+            export SSL_CERT_FILE="$PREFIX/etc/tls/cert.pem"
+            export CURL_CA_BUNDLE="$PREFIX/etc/tls/cert.pem"
+        fi
     fi
 
-    # Check if rustup is available
+    # Check if rustup is available and working
     if command -v rustup &> /dev/null; then
-        # Ensure a default toolchain is set
-        if ! rustup show active-toolchain &> /dev/null; then
-            print_status "Setting up default Rust toolchain..."
-            rustup default stable
+        # Test if rustup actually works (may fail on Termux with SSL issues)
+        if rustup show active-toolchain &> /dev/null 2>&1; then
+            RUST_VER=$(rustc --version 2>/dev/null || echo "installed")
+            print_success "Using existing rustup: $RUST_VER"
+            return 0
         fi
-        RUST_VER=$(rustc --version 2>/dev/null || echo "installed")
-        print_success "Using existing rustup: $RUST_VER"
-        return 0
+
+        # Try to set default toolchain
+        print_status "Setting up default Rust toolchain..."
+        if rustup default stable 2>&1; then
+            RUST_VER=$(rustc --version 2>/dev/null || echo "installed")
+            print_success "Using existing rustup: $RUST_VER"
+            return 0
+        fi
+
+        # Rustup is broken (common on Termux) - reinstall it
+        if [ "$IS_TERMUX" = true ]; then
+            print_warning "Rustup installation is broken. Reinstalling..."
+            rm -rf "$HOME/.rustup" "$HOME/.cargo"
+            hash -r
+        fi
     fi
 
     # Check if rustc exists without rustup
