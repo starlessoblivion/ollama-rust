@@ -15,6 +15,13 @@ pub struct ChatMessage {
 }
 
 #[server]
+pub async fn get_hostname() -> Result<String, ServerFnError> {
+    Ok(hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "ollama".to_string()))
+}
+
+#[server]
 pub async fn get_ollama_status() -> Result<StatusResponse, ServerFnError> {
     let client = reqwest::Client::new();
 
@@ -104,6 +111,7 @@ pub fn App() -> impl IntoView {
 
     // Resources
     let status_resource = Resource::new(|| (), |_| get_ollama_status());
+    let hostname_resource = Resource::new(|| (), |_| get_hostname());
 
     // Toggle action
     let toggle_action = Action::new(move |_: &()| async move {
@@ -361,7 +369,15 @@ pub fn App() -> impl IntoView {
                     </div>
                 </div>
 
-                <div class="chat-title">"🧠"</div>
+                <div class="chat-title">
+                    <Suspense fallback=move || view! { "..." }>
+                        {move || {
+                            hostname_resource.get().map(|result| {
+                                result.unwrap_or_else(|_| "ollama".to_string())
+                            })
+                        }}
+                    </Suspense>
+                </div>
 
                 <div class="header-right">
                     <label class="toggle-switch" title="Toggle Ollama serve">
