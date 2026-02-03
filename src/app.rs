@@ -416,8 +416,11 @@ pub async fn cloud_login(email: String, password: String) -> Result<CloudLoginRe
 
     match res {
         Ok(response) => {
-            if response.status().is_success() {
-                if let Ok(json) = response.json::<serde_json::Value>().await {
+            let is_success = response.status().is_success();
+            let json_result = response.json::<serde_json::Value>().await;
+
+            if is_success {
+                if let Ok(json) = json_result {
                     let api_key = json["api_key"].as_str().map(|s| s.to_string());
 
                     // Store credentials
@@ -436,7 +439,7 @@ pub async fn cloud_login(email: String, password: String) -> Result<CloudLoginRe
             }
 
             // Handle error response
-            let error_msg = if let Ok(json) = response.json::<serde_json::Value>().await {
+            let error_msg = if let Ok(json) = json_result {
                 json["error"].as_str().unwrap_or("Login failed").to_string()
             } else {
                 "Login failed".to_string()
@@ -481,16 +484,15 @@ pub async fn check_cloud_login() -> Result<Option<String>, ServerFnError> {
 
 #[server]
 pub async fn get_cloud_models() -> Result<CloudModelsResponse, ServerFnError> {
-    // Check if logged in
-    let store = get_cloud_credentials_store();
-    let creds = store.lock().unwrap();
-
-    if creds.is_none() {
-        return Ok(CloudModelsResponse { models: vec![] });
-    }
-
-    let api_key = creds.as_ref().map(|(_, k)| k.clone()).unwrap_or_default();
-    drop(creds); // Release lock before async call
+    // Check if logged in and get API key in a separate scope to release lock
+    let api_key = {
+        let store = get_cloud_credentials_store();
+        let creds = store.lock().unwrap();
+        match creds.as_ref() {
+            Some((_, key)) => key.clone(),
+            None => return Ok(CloudModelsResponse { models: vec![] }),
+        }
+    };
 
     // Try to fetch cloud models
     let client = reqwest::Client::new();
