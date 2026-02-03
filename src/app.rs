@@ -395,6 +395,45 @@ pub fn App() -> impl IntoView {
     let (active_downloads, set_active_downloads) = signal::<Vec<PullProgress>>(vec![]);
     let (deleting_model, set_deleting_model) = signal::<Option<String>>(None);
     let (status_dropdown_open, set_status_dropdown_open) = signal(false);
+    let (current_theme, set_current_theme) = signal(String::from("light"));
+
+    // Load theme from localStorage on mount
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::JsCast;
+        Effect::new(move |_| {
+            if let Some(window) = web_sys::window() {
+                if let Ok(Some(storage)) = window.local_storage() {
+                    if let Ok(Some(saved_theme)) = storage.get_item("theme") {
+                        set_current_theme.set(saved_theme.clone());
+                        if let Some(document) = window.document() {
+                            if let Some(body) = document.body() {
+                                let _ = body.set_attribute("data-theme", &saved_theme);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Apply theme change
+    let apply_theme = move |theme: String| {
+        set_current_theme.set(theme.clone());
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(window) = web_sys::window() {
+                if let Ok(Some(storage)) = window.local_storage() {
+                    let _ = storage.set_item("theme", &theme);
+                }
+                if let Some(document) = window.document() {
+                    if let Some(body) = document.body() {
+                        let _ = body.set_attribute("data-theme", &theme);
+                    }
+                }
+            }
+        }
+    };
 
     // Resources
     let status_resource = Resource::new(|| (), |_| get_ollama_status());
@@ -931,6 +970,59 @@ pub fn App() -> impl IntoView {
                                            } />
                                     <span class="slider"></span>
                                 </label>
+                            </div>
+
+                            <div class="status-divider"></div>
+
+                            <div class="theme-section">
+                                <div class="theme-label">"Theme"</div>
+                                <div class="theme-options">
+                                    <div class="theme-option"
+                                         class:active=move || current_theme.get() == "light"
+                                         on:click={
+                                             let apply = apply_theme.clone();
+                                             move |_| apply("light".to_string())
+                                         }>
+                                        <span class="theme-dot light"></span>
+                                        "Light"
+                                    </div>
+                                    <div class="theme-option"
+                                         class:active=move || current_theme.get() == "dark"
+                                         on:click={
+                                             let apply = apply_theme.clone();
+                                             move |_| apply("dark".to_string())
+                                         }>
+                                        <span class="theme-dot dark"></span>
+                                        "Dark"
+                                    </div>
+                                    <div class="theme-option"
+                                         class:active=move || current_theme.get() == "amoled"
+                                         on:click={
+                                             let apply = apply_theme.clone();
+                                             move |_| apply("amoled".to_string())
+                                         }>
+                                        <span class="theme-dot amoled"></span>
+                                        "AMOLED"
+                                    </div>
+                                    <div class="theme-option"
+                                         class:active=move || current_theme.get() == "hacker"
+                                         on:click={
+                                             let apply = apply_theme.clone();
+                                             move |_| apply("hacker".to_string())
+                                         }>
+                                        <span class="theme-dot hacker"></span>
+                                        "Hacker"
+                                    </div>
+                                    <div class="theme-option"
+                                         class:active=move || current_theme.get() == "nordic"
+                                         on:click={
+                                             let apply = apply_theme.clone();
+                                             move |_| apply("nordic".to_string())
+                                         }>
+                                        <span class="theme-dot nordic"></span>
+                                        "Nordic"
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
