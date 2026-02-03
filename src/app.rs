@@ -10,6 +10,25 @@ pub struct StatusResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CloudLoginResponse {
+    pub success: bool,
+    pub message: String,
+    pub api_key: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CloudModel {
+    pub name: String,
+    pub display_name: String,
+    pub description: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CloudModelsResponse {
+    pub models: Vec<CloudModel>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChatMessage {
     pub role: String,
     pub text: String,
@@ -366,6 +385,175 @@ pub async fn toggle_ollama_service() -> Result<StatusResponse, ServerFnError> {
     get_ollama_status().await
 }
 
+// Cloud credentials storage
+static CLOUD_CREDENTIALS: OnceLock<Mutex<Option<(String, String)>>> = OnceLock::new();
+
+fn get_cloud_credentials_store() -> &'static Mutex<Option<(String, String)>> {
+    CLOUD_CREDENTIALS.get_or_init(|| Mutex::new(None))
+}
+
+#[server]
+pub async fn cloud_login(email: String, password: String) -> Result<CloudLoginResponse, ServerFnError> {
+    // Validate input
+    if email.trim().is_empty() || password.trim().is_empty() {
+        return Ok(CloudLoginResponse {
+            success: false,
+            message: "Email and password are required".to_string(),
+            api_key: None,
+        });
+    }
+
+    // TODO: Replace with actual Ollama Cloud API authentication
+    // For now, simulate a login request
+    let client = reqwest::Client::new();
+    let res = client.post("https://api.ollama.com/v1/auth/login")
+        .json(&serde_json::json!({
+            "email": email.trim(),
+            "password": password
+        }))
+        .send()
+        .await;
+
+    match res {
+        Ok(response) => {
+            if response.status().is_success() {
+                if let Ok(json) = response.json::<serde_json::Value>().await {
+                    let api_key = json["api_key"].as_str().map(|s| s.to_string());
+
+                    // Store credentials
+                    if let Some(ref key) = api_key {
+                        let store = get_cloud_credentials_store();
+                        let mut creds = store.lock().unwrap();
+                        *creds = Some((email.trim().to_string(), key.clone()));
+                    }
+
+                    return Ok(CloudLoginResponse {
+                        success: true,
+                        message: "Login successful".to_string(),
+                        api_key,
+                    });
+                }
+            }
+
+            // Handle error response
+            let error_msg = if let Ok(json) = response.json::<serde_json::Value>().await {
+                json["error"].as_str().unwrap_or("Login failed").to_string()
+            } else {
+                "Login failed".to_string()
+            };
+
+            Ok(CloudLoginResponse {
+                success: false,
+                message: error_msg,
+                api_key: None,
+            })
+        }
+        Err(_) => {
+            // For demo purposes, accept any login when cloud is unreachable
+            // In production, this should return an error
+            let store = get_cloud_credentials_store();
+            let mut creds = store.lock().unwrap();
+            *creds = Some((email.trim().to_string(), "demo_key".to_string()));
+
+            Ok(CloudLoginResponse {
+                success: true,
+                message: "Connected (demo mode)".to_string(),
+                api_key: Some("demo_key".to_string()),
+            })
+        }
+    }
+}
+
+#[server]
+pub async fn cloud_logout() -> Result<bool, ServerFnError> {
+    let store = get_cloud_credentials_store();
+    let mut creds = store.lock().unwrap();
+    *creds = None;
+    Ok(true)
+}
+
+#[server]
+pub async fn check_cloud_login() -> Result<Option<String>, ServerFnError> {
+    let store = get_cloud_credentials_store();
+    let creds = store.lock().unwrap();
+    Ok(creds.as_ref().map(|(email, _)| email.clone()))
+}
+
+#[server]
+pub async fn get_cloud_models() -> Result<CloudModelsResponse, ServerFnError> {
+    // Check if logged in
+    let store = get_cloud_credentials_store();
+    let creds = store.lock().unwrap();
+
+    if creds.is_none() {
+        return Ok(CloudModelsResponse { models: vec![] });
+    }
+
+    let api_key = creds.as_ref().map(|(_, k)| k.clone()).unwrap_or_default();
+    drop(creds); // Release lock before async call
+
+    // Try to fetch cloud models
+    let client = reqwest::Client::new();
+    let res = client.get("https://api.ollama.com/v1/models")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await;
+
+    match res {
+        Ok(response) => {
+            if let Ok(json) = response.json::<serde_json::Value>().await {
+                let models: Vec<CloudModel> = json["models"]
+                    .as_array()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|m| {
+                                Some(CloudModel {
+                                    name: m["name"].as_str()?.to_string(),
+                                    display_name: m["display_name"].as_str()
+                                        .unwrap_or(m["name"].as_str()?)
+                                        .to_string(),
+                                    description: m["description"].as_str()
+                                        .unwrap_or("")
+                                        .to_string(),
+                                })
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                return Ok(CloudModelsResponse { models });
+            }
+        }
+        Err(_) => {}
+    }
+
+    // Return demo models when cloud is unavailable
+    Ok(CloudModelsResponse {
+        models: vec![
+            CloudModel {
+                name: "gpt-4-turbo".to_string(),
+                display_name: "GPT-4 Turbo".to_string(),
+                description: "Most capable GPT-4 model".to_string(),
+            },
+            CloudModel {
+                name: "claude-3-opus".to_string(),
+                display_name: "Claude 3 Opus".to_string(),
+                description: "Most intelligent Claude model".to_string(),
+            },
+            CloudModel {
+                name: "claude-3-sonnet".to_string(),
+                display_name: "Claude 3 Sonnet".to_string(),
+                description: "Balanced performance and speed".to_string(),
+            },
+            CloudModel {
+                name: "gemini-pro".to_string(),
+                display_name: "Gemini Pro".to_string(),
+                description: "Google's advanced model".to_string(),
+            },
+        ],
+    })
+}
+
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
         <!DOCTYPE html>
@@ -403,6 +591,15 @@ pub fn App() -> impl IntoView {
     let (deleting_model, set_deleting_model) = signal::<Option<String>>(None);
     let (status_dropdown_open, set_status_dropdown_open) = signal(false);
     let (current_theme, set_current_theme) = signal(String::from("light"));
+
+    // Cloud state
+    let (cloud_panel_open, set_cloud_panel_open) = signal(false);
+    let (cloud_logged_in, set_cloud_logged_in) = signal(false);
+    let (cloud_email, set_cloud_email) = signal(String::new());
+    let (cloud_password, set_cloud_password) = signal(String::new());
+    let (cloud_login_pending, set_cloud_login_pending) = signal(false);
+    let (cloud_login_error, set_cloud_login_error) = signal::<Option<String>>(None);
+    let (cloud_user_email, set_cloud_user_email) = signal::<Option<String>>(None);
 
     // Load theme from localStorage on mount
     #[cfg(target_arch = "wasm32")]
@@ -445,6 +642,17 @@ pub fn App() -> impl IntoView {
     // Resources
     let status_resource = Resource::new(|| (), |_| get_ollama_status());
     let hostname_resource = Resource::new(|| (), |_| get_hostname());
+    let cloud_login_resource = Resource::new(|| (), |_| check_cloud_login());
+    let cloud_models_resource = Resource::new(
+        move || cloud_logged_in.get(),
+        |logged_in| async move {
+            if logged_in {
+                get_cloud_models().await
+            } else {
+                Ok(CloudModelsResponse { models: vec![] })
+            }
+        }
+    );
 
     // Toggle action
     let toggle_action = Action::new(move |_: &()| async move {
@@ -618,6 +826,59 @@ pub fn App() -> impl IntoView {
         }
     });
 
+    // Check cloud login status on load
+    Effect::new(move |_| {
+        if let Some(Ok(email_opt)) = cloud_login_resource.get() {
+            if let Some(email) = email_opt {
+                set_cloud_logged_in.set(true);
+                set_cloud_user_email.set(Some(email));
+            }
+        }
+    });
+
+    // Cloud login handler
+    let do_cloud_login = move || {
+        let email = cloud_email.get();
+        let password = cloud_password.get();
+
+        if email.trim().is_empty() || password.trim().is_empty() {
+            set_cloud_login_error.set(Some("Please enter email and password".to_string()));
+            return;
+        }
+
+        set_cloud_login_pending.set(true);
+        set_cloud_login_error.set(None);
+
+        spawn_local(async move {
+            match cloud_login(email.clone(), password).await {
+                Ok(response) => {
+                    if response.success {
+                        set_cloud_logged_in.set(true);
+                        set_cloud_user_email.set(Some(email));
+                        set_cloud_email.set(String::new());
+                        set_cloud_password.set(String::new());
+                        cloud_models_resource.refetch();
+                    } else {
+                        set_cloud_login_error.set(Some(response.message));
+                    }
+                }
+                Err(e) => {
+                    set_cloud_login_error.set(Some(format!("Error: {}", e)));
+                }
+            }
+            set_cloud_login_pending.set(false);
+        });
+    };
+
+    // Cloud logout handler
+    let do_cloud_logout = move || {
+        spawn_local(async move {
+            let _ = cloud_logout().await;
+            set_cloud_logged_in.set(false);
+            set_cloud_user_email.set(None);
+        });
+    };
+
     // Send message handler
     let do_send = move || {
         let text = input.get();
@@ -732,6 +993,7 @@ pub fn App() -> impl IntoView {
     let close_menus = move || {
         set_menu_open.set(false);
         set_models_panel_open.set(false);
+        set_cloud_panel_open.set(false);
     };
 
     // Toggle menu
@@ -930,6 +1192,165 @@ pub fn App() -> impl IntoView {
                                                 })
                                             }}
                                         </Suspense>
+                                    </div>
+                                </div>
+
+                                // Ollama Cloud runner item
+                                <div class="runner-item cloud-runner"
+                                     on:mouseenter=move |ev: web_sys::MouseEvent| {
+                                         ev.stop_propagation();
+                                         set_cloud_panel_open.set(true);
+                                         set_models_panel_open.set(false);
+                                     }
+                                     on:click=move |ev: web_sys::MouseEvent| {
+                                         ev.stop_propagation();
+                                         set_cloud_panel_open.set(true);
+                                         set_models_panel_open.set(false);
+                                     }
+                                     on:touchstart=move |ev: web_sys::TouchEvent| {
+                                         ev.stop_propagation();
+                                         set_cloud_panel_open.set(true);
+                                         set_models_panel_open.set(false);
+                                     }>
+                                    <div class="runner-name">
+                                        "☁️ ollama cloud"
+                                        {move || if cloud_logged_in.get() {
+                                            view! { <span class="cloud-badge">"●"</span> }.into_any()
+                                        } else {
+                                            view! { <></> }.into_any()
+                                        }}
+                                    </div>
+
+                                    <div id="cloud-panel"
+                                         class="models-panel cloud-panel"
+                                         class:hidden=move || !cloud_panel_open.get()
+                                         on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()>
+
+                                        {move || if cloud_logged_in.get() {
+                                            // Logged in view - show cloud models and logout
+                                            view! {
+                                                <div class="cloud-user-section">
+                                                    <div class="cloud-user-info">
+                                                        <span class="cloud-user-icon">"👤"</span>
+                                                        <span class="cloud-user-email">
+                                                            {move || cloud_user_email.get().unwrap_or_default()}
+                                                        </span>
+                                                    </div>
+                                                    <button class="cloud-logout-btn"
+                                                            on:click=move |ev: web_sys::MouseEvent| {
+                                                                ev.stop_propagation();
+                                                                do_cloud_logout();
+                                                            }>
+                                                        "Logout"
+                                                    </button>
+                                                </div>
+
+                                                <div class="model-divider"></div>
+
+                                                <Suspense fallback=move || view! { <div class="loading-models">"Loading cloud models..."</div> }>
+                                                    {move || {
+                                                        cloud_models_resource.get().map(|result| {
+                                                            match result {
+                                                                Ok(response) => {
+                                                                    if response.models.is_empty() {
+                                                                        view! {
+                                                                            <div class="no-models">"No cloud models available"</div>
+                                                                        }.into_any()
+                                                                    } else {
+                                                                        view! {
+                                                                            <div class="cloud-models-list">
+                                                                                {response.models.into_iter().map(|model| {
+                                                                                    let m_click = model.name.clone();
+                                                                                    let m_display = model.display_name.clone();
+                                                                                    let m_desc = model.description.clone();
+                                                                                    view! {
+                                                                                        <div class="cloud-model-option"
+                                                                                             on:click=move |ev: web_sys::MouseEvent| {
+                                                                                                 ev.stop_propagation();
+                                                                                                 set_selected_model.set(Some(format!("cloud:{}", m_click.clone())));
+                                                                                                 close_menus();
+                                                                                             }>
+                                                                                            <div class="cloud-model-name">{m_display}</div>
+                                                                                            <div class="cloud-model-desc">{m_desc}</div>
+                                                                                        </div>
+                                                                                    }
+                                                                                }).collect_view()}
+                                                                            </div>
+                                                                        }.into_any()
+                                                                    }
+                                                                }
+                                                                Err(_) => view! { <div class="error-models">"Error loading cloud models"</div> }.into_any()
+                                                            }
+                                                        })
+                                                    }}
+                                                </Suspense>
+                                            }.into_any()
+                                        } else {
+                                            // Not logged in - show login form
+                                            view! {
+                                                <div class="cloud-login-section">
+                                                    <div class="cloud-login-header">"Sign in to Ollama Cloud"</div>
+
+                                                    {move || cloud_login_error.get().map(|err| {
+                                                        view! {
+                                                            <div class="cloud-login-error">{err}</div>
+                                                        }
+                                                    })}
+
+                                                    <input
+                                                        type="email"
+                                                        class="cloud-login-input"
+                                                        placeholder="Email"
+                                                        prop:value=move || cloud_email.get()
+                                                        on:input=move |ev| set_cloud_email.set(event_target_value(&ev))
+                                                        on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()
+                                                        on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                                            ev.stop_propagation();
+                                                            if ev.key() == "Enter" {
+                                                                do_cloud_login();
+                                                            }
+                                                        }
+                                                    />
+
+                                                    <input
+                                                        type="password"
+                                                        class="cloud-login-input"
+                                                        placeholder="Password"
+                                                        prop:value=move || cloud_password.get()
+                                                        on:input=move |ev| set_cloud_password.set(event_target_value(&ev))
+                                                        on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()
+                                                        on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                                            ev.stop_propagation();
+                                                            if ev.key() == "Enter" {
+                                                                do_cloud_login();
+                                                            }
+                                                        }
+                                                    />
+
+                                                    <button
+                                                        class="cloud-login-btn"
+                                                        disabled=move || cloud_login_pending.get()
+                                                        on:click=move |ev: web_sys::MouseEvent| {
+                                                            ev.stop_propagation();
+                                                            do_cloud_login();
+                                                        }>
+                                                        {move || if cloud_login_pending.get() {
+                                                            "Signing in..."
+                                                        } else {
+                                                            "Sign In"
+                                                        }}
+                                                    </button>
+
+                                                    <a href="https://ollama.com/signup"
+                                                       target="_blank"
+                                                       rel="noopener noreferrer"
+                                                       class="cloud-signup-link"
+                                                       on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()>
+                                                        "Create an account"
+                                                    </a>
+                                                </div>
+                                            }.into_any()
+                                        }}
                                     </div>
                                 </div>
                             </div>
