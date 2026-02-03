@@ -583,6 +583,8 @@ pub fn App() -> impl IntoView {
     let (show_email_login, set_show_email_login) = signal(false);
     let (cloud_email, set_cloud_email) = signal(String::new());
     let (cloud_password, set_cloud_password) = signal(String::new());
+    let (show_add_cloud_model, set_show_add_cloud_model) = signal(false);
+    let (new_cloud_model_name, set_new_cloud_model_name) = signal(String::new());
 
     // Load theme from localStorage on mount
     #[cfg(target_arch = "wasm32")]
@@ -1278,6 +1280,81 @@ pub fn App() -> impl IntoView {
                                                             }>
                                                         "Logout"
                                                     </button>
+                                                </div>
+
+                                                <div class="model-divider"></div>
+
+                                                // Add Cloud Model section
+                                                <div class="add-model-section">
+                                                    <a href="https://ollama.com/library"
+                                                       target="_blank"
+                                                       rel="noopener noreferrer"
+                                                       class="model-option library-link"
+                                                       on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()>
+                                                        "📚 Browse Models"
+                                                    </a>
+
+                                                    {move || if show_add_cloud_model.get() {
+                                                        view! {
+                                                            <div class="add-model-input-row">
+                                                                <input
+                                                                    type="text"
+                                                                    class="add-model-input"
+                                                                    placeholder="model name (e.g. llama3)"
+                                                                    prop:value=move || new_cloud_model_name.get()
+                                                                    on:input=move |ev| set_new_cloud_model_name.set(event_target_value(&ev))
+                                                                    on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()
+                                                                    on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                                                        ev.stop_propagation();
+                                                                        if ev.key() == "Enter" {
+                                                                            let name = new_cloud_model_name.get();
+                                                                            if !name.trim().is_empty() {
+                                                                                set_selected_model.set(Some(format!("cloud:{}", name.trim())));
+                                                                                set_new_cloud_model_name.set(String::new());
+                                                                                set_show_add_cloud_model.set(false);
+                                                                                close_menus();
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                />
+                                                                <button
+                                                                    class="add-model-btn pull-btn"
+                                                                    on:click=move |ev: web_sys::MouseEvent| {
+                                                                        ev.stop_propagation();
+                                                                        let name = new_cloud_model_name.get();
+                                                                        if !name.trim().is_empty() {
+                                                                            set_selected_model.set(Some(format!("cloud:{}", name.trim())));
+                                                                            set_new_cloud_model_name.set(String::new());
+                                                                            set_show_add_cloud_model.set(false);
+                                                                            close_menus();
+                                                                        }
+                                                                    }
+                                                                >
+                                                                    "Add"
+                                                                </button>
+                                                                <button
+                                                                    class="add-model-btn cancel-btn"
+                                                                    on:click=move |ev: web_sys::MouseEvent| {
+                                                                        ev.stop_propagation();
+                                                                        set_show_add_cloud_model.set(false);
+                                                                        set_new_cloud_model_name.set(String::new());
+                                                                    }
+                                                                >
+                                                                    "✕"
+                                                                </button>
+                                                            </div>
+                                                        }.into_any()
+                                                    } else {
+                                                        view! {
+                                                            <div class="model-option add-model-option"
+                                                                 on:click=move |ev: web_sys::MouseEvent| {
+                                                                     ev.stop_propagation();
+                                                                     set_show_add_cloud_model.set(true);
+                                                                 }>
+                                                                "+ Add Model"
+                                                            </div>
+                                                        }.into_any()
+                                                    }}
                                                 </div>
 
                                                 <div class="model-divider"></div>
