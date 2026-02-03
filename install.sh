@@ -73,6 +73,11 @@ install_rust() {
 
     # Check if rustup is available
     if command -v rustup &> /dev/null; then
+        # Ensure a default toolchain is set
+        if ! rustc --version &> /dev/null; then
+            print_status "Setting up default Rust toolchain..."
+            rustup default stable
+        fi
         print_success "Using existing rustup: $(rustc --version)"
         return 0
     fi
