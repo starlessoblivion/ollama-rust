@@ -217,6 +217,31 @@ fn format_bytes(bytes: u64) -> String {
 }
 
 #[server]
+pub async fn cancel_model_pull(model_name: String) -> Result<bool, ServerFnError> {
+    use std::process::Command;
+
+    let model = model_name.trim().to_string();
+
+    // Mark as cancelled in progress store
+    {
+        let store = get_progress_store();
+        let mut map = store.lock().unwrap();
+        if let Some(progress) = map.get_mut(&model) {
+            progress.done = true;
+            progress.status = "Cancelled".to_string();
+            progress.error = Some("Download cancelled by user".to_string());
+        }
+    }
+
+    // Kill any running ollama pull process for this model
+    let _ = Command::new("pkill")
+        .args(["-f", &format!("ollama pull {}", model)])
+        .output();
+
+    Ok(true)
+}
+
+#[server]
 pub async fn check_pull_progress(model_name: String) -> Result<PullProgress, ServerFnError> {
     let model = model_name.trim().to_string();
 
@@ -900,13 +925,18 @@ pub fn App() -> impl IntoView {
 
                     downloads.into_iter().map(|dl| {
                         let model_name = dl.model.clone();
-                        let model_for_remove = dl.model.clone();
+                        let model_for_hide = dl.model.clone();
+                        let model_for_cancel = dl.model.clone();
+                        let model_for_cancel_update = dl.model.clone();
                         let status = dl.status.clone();
                         let status_for_check = status.clone();
                         let percent = dl.percent;
                         let speed = dl.speed.clone();
+                        let is_done = dl.done;
 
                         let is_complete = status_for_check == "Complete";
+                        let is_cancelled = status_for_check == "Cancelled";
+                        let can_cancel = !is_done && !is_complete && !is_cancelled;
                         let percent_display = format!("{:.0}%", percent);
 
                         view! {
@@ -924,13 +954,39 @@ pub fn App() -> impl IntoView {
                                     } else {
                                         view! { <></> }.into_any()
                                     }}
-                                    <button class="download-dismiss"
+                                    // Cancel button - stops the download
+                                    {if can_cancel {
+                                        view! {
+                                            <button class="download-cancel"
+                                                    title="Cancel download"
+                                                    on:click=move |_| {
+                                                        let model = model_for_cancel.clone();
+                                                        let model_update = model_for_cancel_update.clone();
+                                                        spawn_local(async move {
+                                                            let _ = cancel_model_pull(model).await;
+                                                        });
+                                                        set_active_downloads.update(|downloads| {
+                                                            if let Some(d) = downloads.iter_mut().find(|d| d.model == model_update) {
+                                                                d.done = true;
+                                                                d.status = "Cancelled".to_string();
+                                                            }
+                                                        });
+                                                    }>
+                                                "⏹"
+                                            </button>
+                                        }.into_any()
+                                    } else {
+                                        view! { <></> }.into_any()
+                                    }}
+                                    // Hide button - just removes from UI
+                                    <button class="download-hide"
+                                            title="Hide"
                                             on:click=move |_| {
                                                 set_active_downloads.update(|downloads| {
-                                                    downloads.retain(|d| d.model != model_for_remove);
+                                                    downloads.retain(|d| d.model != model_for_hide);
                                                 });
                                             }>
-                                        "✕"
+                                        "−"
                                     </button>
                                 </div>
                                 <div class="progress-track">

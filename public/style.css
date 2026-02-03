@@ -500,7 +500,8 @@ body {
     font-weight: 600;
 }
 
-.download-dismiss {
+.download-cancel,
+.download-hide {
     background: none;
     border: none;
     color: #999;
@@ -510,7 +511,12 @@ body {
     border-radius: 4px;
 }
 
-.download-dismiss:hover {
+.download-cancel:hover {
+    background: #fee;
+    color: #c00;
+}
+
+.download-hide:hover {
     background: #e5e5e5;
     color: #333;
 }
