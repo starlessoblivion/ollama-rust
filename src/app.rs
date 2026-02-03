@@ -16,9 +16,32 @@ pub struct ChatMessage {
 
 #[server]
 pub async fn get_hostname() -> Result<String, ServerFnError> {
-    Ok(hostname::get()
-        .map(|h| h.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "ollama".to_string()))
+    // Try to get hostname from system
+    if let Ok(hostname) = std::fs::read_to_string("/etc/hostname") {
+        let hostname = hostname.trim().to_string();
+        if !hostname.is_empty() {
+            return Ok(hostname);
+        }
+    }
+
+    // Fallback: try HOSTNAME env var
+    if let Ok(hostname) = std::env::var("HOSTNAME") {
+        if !hostname.is_empty() {
+            return Ok(hostname);
+        }
+    }
+
+    // Fallback: try running hostname command
+    if let Ok(output) = std::process::Command::new("hostname").output() {
+        if output.status.success() {
+            let hostname = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !hostname.is_empty() {
+                return Ok(hostname);
+            }
+        }
+    }
+
+    Ok("ollama".to_string())
 }
 
 #[server]

@@ -41,7 +41,6 @@ tokio-util = { version = "0.7", features = ["codec", "io"] }
 console_error_panic_hook = "0.1"
 console_log = "1.0"
 log = "0.4"
-hostname = "0.4"
 
 # Backend logic
 axum = { version = "0.7", features = ["macros"], optional = true }
