@@ -329,19 +329,20 @@ pub fn App() -> impl IntoView {
                                                             view! {
                                                                 <div id="ollama-models" class="model-submenu">
                                                                     {status.models.into_iter().map(|model| {
-                                                                        let m = model.clone();
-                                                                        let m2 = model.clone();
+                                                                        let m_click = model.clone();
+                                                                        let m_touch = model.clone();
+                                                                        let m_display = model.clone();
                                                                         view! {
                                                                             <div class="model-option"
                                                                                  on:click=move |ev: web_sys::MouseEvent| {
                                                                                      ev.stop_propagation();
-                                                                                     select_model(m.clone());
+                                                                                     select_model(m_click.clone());
                                                                                  }
                                                                                  on:touchend=move |ev: web_sys::TouchEvent| {
                                                                                      ev.stop_propagation();
-                                                                                     select_model(m.clone());
+                                                                                     select_model(m_touch.clone());
                                                                                  }>
-                                                                                {m2}
+                                                                                {m_display}
                                                                             </div>
                                                                         }
                                                                     }).collect_view()}
