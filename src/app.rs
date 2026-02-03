@@ -1,7 +1,21 @@
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
+use pulldown_cmark::{Parser, Options, html};
 use serde::{Deserialize, Serialize};
+
+/// Convert markdown text to HTML
+fn markdown_to_html(text: &str) -> String {
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TABLES);
+    options.insert(Options::ENABLE_TASKLISTS);
+
+    let parser = Parser::new_ext(text, options);
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+    html_output
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StatusResponse {
@@ -2096,12 +2110,13 @@ pub fn App() -> impl IntoView {
                                         </span>
                                     }.into_any()
                                 } else if is_user {
-                                    // User message - just show text
+                                    // User message - plain text
                                     view! { <span>{msg_text}</span> }.into_any()
                                 } else {
-                                    // AI message with hostname prefix
+                                    // AI message with hostname prefix and markdown rendering
+                                    let rendered_html = markdown_to_html(&msg_text);
                                     view! {
-                                        <span>
+                                        <div class="ai-message-content">
                                             <span class="msg-prefix">
                                                 <Suspense fallback=move || view! { "[...]:" }>
                                                     {move || hostname_resource.get().map(|h| {
@@ -2109,8 +2124,8 @@ pub fn App() -> impl IntoView {
                                                     })}
                                                 </Suspense>
                                             </span>
-                                            {msg_text.clone()}
-                                        </span>
+                                            <div class="markdown-content" inner_html=rendered_html></div>
+                                        </div>
                                     }.into_any()
                                 }}
                             </div>

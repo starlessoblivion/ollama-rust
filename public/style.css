@@ -39,6 +39,10 @@
     --model-btn-text: #001f3f;
     --model-btn-hover: #f0f0f0;
 
+    --bg-code: rgba(0,0,0,0.06);
+    --bg-code-block: #1e1e1e;
+    --text-code: #d4d4d4;
+
     --font-family: 'Segoe UI', system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -76,6 +80,10 @@
     --model-btn-bg: #5aa0e5;
     --model-btn-text: #fff;
     --model-btn-hover: #6ab0ff;
+
+    --bg-code: rgba(255,255,255,0.1);
+    --bg-code-block: #1a1a1a;
+    --text-code: #d4d4d4;
 }
 
 [data-theme="amoled"] {
@@ -112,6 +120,10 @@
     --model-btn-bg: #1a73e8;
     --model-btn-text: #fff;
     --model-btn-hover: #4a9fff;
+
+    --bg-code: rgba(255,255,255,0.1);
+    --bg-code-block: #000;
+    --text-code: #fff;
 }
 
 [data-theme="hacker"] {
@@ -152,6 +164,10 @@
     --model-btn-bg: #00ff00;
     --model-btn-text: #000;
     --model-btn-hover: #00cc00;
+
+    --bg-code: rgba(0,255,0,0.1);
+    --bg-code-block: #001100;
+    --text-code: #00ff00;
 
     --font-family: 'Courier New', 'Consolas', monospace;
 }
@@ -194,6 +210,10 @@
     --model-btn-bg: #88c0d0;
     --model-btn-text: #2e3440;
     --model-btn-hover: #8fbcbb;
+
+    --bg-code: rgba(136,192,208,0.15);
+    --bg-code-block: #2e3440;
+    --text-code: #d8dee9;
 }
 
 /* ===== LAYOUT VARIABLES ===== */
@@ -1106,6 +1126,149 @@ body {
     font-weight: 700;
     color: var(--accent);
     margin-right: 0.25rem;
+}
+
+/* AI message content layout */
+.ai-message-content {
+    display: block;
+}
+
+/* Markdown content styling */
+.markdown-content {
+    display: inline;
+}
+
+.markdown-content p {
+    margin: 0 0 0.5em 0;
+}
+
+.markdown-content p:last-child {
+    margin-bottom: 0;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+    margin: 0.75em 0 0.5em 0;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.markdown-content h1 { font-size: 1.4em; }
+.markdown-content h2 { font-size: 1.25em; }
+.markdown-content h3 { font-size: 1.1em; }
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 { font-size: 1em; }
+
+.markdown-content code {
+    background: var(--bg-code, rgba(0,0,0,0.08));
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.9em;
+}
+
+.markdown-content pre {
+    background: var(--bg-code-block, #1e1e1e);
+    color: var(--text-code, #d4d4d4);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 0.5em 0;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+.markdown-content pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    color: inherit;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+}
+
+.markdown-content li {
+    margin: 0.25em 0;
+}
+
+.markdown-content blockquote {
+    margin: 0.5em 0;
+    padding: 0.5em 1em;
+    border-left: 3px solid var(--accent);
+    background: var(--bg-menu-hover);
+    border-radius: 0 6px 6px 0;
+}
+
+.markdown-content a {
+    color: var(--link, #0066cc);
+    text-decoration: underline;
+}
+
+.markdown-content a:hover {
+    text-decoration: none;
+}
+
+.markdown-content table {
+    border-collapse: collapse;
+    margin: 0.5em 0;
+    width: 100%;
+    font-size: 0.9em;
+}
+
+.markdown-content th,
+.markdown-content td {
+    border: 1px solid var(--border);
+    padding: 0.4em 0.6em;
+    text-align: left;
+}
+
+.markdown-content th {
+    background: var(--bg-menu-hover);
+    font-weight: 600;
+}
+
+.markdown-content hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1em 0;
+}
+
+.markdown-content strong {
+    font-weight: 600;
+}
+
+.markdown-content em {
+    font-style: italic;
+}
+
+.markdown-content del {
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+/* Task list styling */
+.markdown-content ul.task-list {
+    list-style: none;
+    padding-left: 0.5em;
+}
+
+.markdown-content li.task-list-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5em;
+}
+
+.markdown-content input[type="checkbox"] {
+    margin-top: 0.25em;
 }
 
 /* Thinking animation */
