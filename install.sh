@@ -1,7 +1,6 @@
 #!/bin/bash
-# Ollama Rust Web UI Installer v1.3.0 (2026-02-03)
-# Optimized for Termux/Android and standard Linux
-# Fully non-interactive - no prompts
+# Ollama Rust Web UI Installer v2.0.0
+# Optimized for Desktop Linux (Debian/Ubuntu, Arch, Fedora, RHEL)
 # Usage: curl -fsSL https://raw.githubusercontent.com/starlessoblivion/ollama-rust/main/install.sh | bash
 
 set -e
@@ -11,18 +10,12 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 print_status() { echo -e "${BLUE}[*]${NC} $1"; }
 print_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
 print_error() { echo -e "${RED}[✗]${NC} $1"; }
-
-# Detect environment
-IS_TERMUX=false
-if [ -n "$TERMUX_VERSION" ] || [ -d "/data/data/com.termux" ]; then
-    IS_TERMUX=true
-fi
 
 INSTALL_DIR="$HOME/ollama-rust"
 REPO_URL="https://github.com/starlessoblivion/ollama-rust.git"
@@ -30,174 +23,114 @@ REPO_URL="https://github.com/starlessoblivion/ollama-rust.git"
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║     Ollama Rust Web UI Installer      ║${NC}"
+echo -e "${GREEN}║         Desktop Linux Edition         ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════╝${NC}"
 echo ""
 
-if [ "$IS_TERMUX" = true ]; then
-    print_status "Detected Termux environment"
-else
-    print_status "Detected standard Linux environment"
-fi
+# Detect distro
+detect_distro() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        echo "$ID"
+    elif command -v apt-get &> /dev/null; then
+        echo "debian"
+    elif command -v pacman &> /dev/null; then
+        echo "arch"
+    elif command -v dnf &> /dev/null; then
+        echo "fedora"
+    else
+        echo "unknown"
+    fi
+}
+
+DISTRO=$(detect_distro)
+print_status "Detected: $DISTRO Linux"
 
 # Install dependencies
 install_dependencies() {
-    print_status "Installing dependencies..."
+    print_status "Installing system dependencies..."
 
-    if [ "$IS_TERMUX" = true ]; then
-        # Termux - install base deps
-        pkg update -y
-        pkg install -y git openssl pkg-config binutils ca-certificates
-    elif command -v apt-get &> /dev/null; then
-        # Debian/Ubuntu
-        sudo apt-get update
-        sudo apt-get install -y git curl build-essential pkg-config libssl-dev
-    elif command -v pacman &> /dev/null; then
-        # Arch Linux
-        sudo pacman -Sy --noconfirm git curl base-devel openssl pkg-config
-    elif command -v dnf &> /dev/null; then
-        # Fedora
-        sudo dnf install -y git curl gcc openssl-devel pkg-config
-    else
-        print_warning "Unknown package manager. Please install manually: git, openssl, pkg-config"
-    fi
+    case "$DISTRO" in
+        ubuntu|debian|pop|linuxmint|elementary)
+            sudo apt-get update
+            sudo apt-get install -y git curl build-essential pkg-config libssl-dev
+            ;;
+        arch|manjaro|endeavouros)
+            sudo pacman -Sy --noconfirm git curl base-devel openssl pkg-config
+            ;;
+        fedora)
+            sudo dnf install -y git curl gcc make openssl-devel pkg-config
+            ;;
+        rhel|centos|rocky|almalinux)
+            sudo dnf install -y git curl gcc make openssl-devel pkg-config
+            ;;
+        opensuse*|suse)
+            sudo zypper install -y git curl gcc make libopenssl-devel pkg-config
+            ;;
+        *)
+            print_warning "Unknown distro: $DISTRO"
+            print_warning "Please install manually: git, curl, gcc, make, openssl-dev, pkg-config"
+            read -p "Press Enter to continue or Ctrl+C to cancel..."
+            ;;
+    esac
 
     print_success "Dependencies installed"
 }
 
-# Check and setup Rust
+# Install Rust via rustup
 install_rust() {
-    # Source cargo env first if it exists
     if [ -f "$HOME/.cargo/env" ]; then
         source "$HOME/.cargo/env"
     fi
 
-    # Fix for Android/Termux SSL issues with rustup
-    if [ "$IS_TERMUX" = true ]; then
-        export RUSTUP_USE_CURL=1
-        export CARGO_HTTP_CHECK_REVOKE=false
-        # Set SSL cert path for Termux
-        if [ -f "$PREFIX/etc/tls/cert.pem" ]; then
-            export SSL_CERT_FILE="$PREFIX/etc/tls/cert.pem"
-            export CURL_CA_BUNDLE="$PREFIX/etc/tls/cert.pem"
-        fi
-    fi
-
-    # Check if rustup is available and working
-    if command -v rustup &> /dev/null; then
-        # Test if rustup actually works (may fail on Termux with SSL issues)
-        if rustup show active-toolchain &> /dev/null 2>&1; then
-            RUST_VER=$(rustc --version 2>/dev/null || echo "installed")
-            print_success "Using existing rustup: $RUST_VER"
-            return 0
-        fi
-
-        # Try to set default toolchain
-        print_status "Setting up default Rust toolchain..."
-        if rustup default stable 2>&1; then
-            RUST_VER=$(rustc --version 2>/dev/null || echo "installed")
-            print_success "Using existing rustup: $RUST_VER"
-            return 0
-        fi
-
-        # Rustup is broken (common on Termux) - reinstall it
-        if [ "$IS_TERMUX" = true ]; then
-            print_warning "Rustup installation is broken. Reinstalling..."
-            rm -rf "$HOME/.rustup" "$HOME/.cargo"
-            hash -r
-        fi
-    fi
-
-    # Check if rustc exists without rustup
-    if command -v rustc &> /dev/null; then
-        print_warning "Found rustc $(rustc --version) but no rustup"
-        print_warning "rustup is required to add the WASM target"
-
-        if [ "$IS_TERMUX" = true ]; then
-            # On Termux, pkg rust conflicts with rustup - must remove it
-            print_status "Removing pkg rust (incompatible with WASM targets)..."
-            pkg uninstall -y rust 2>/dev/null || true
-            hash -r  # Clear command cache
-        fi
-
-        print_status "Installing rustup..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-        if [ -f "$HOME/.cargo/env" ]; then
-            source "$HOME/.cargo/env"
-        fi
-        print_success "Rustup installed"
+    if command -v rustup &> /dev/null && rustup show active-toolchain &> /dev/null 2>&1; then
+        RUST_VER=$(rustc --version 2>/dev/null || echo "installed")
+        print_success "Rust already installed: $RUST_VER"
         return 0
     fi
 
-    # Neither rustup nor rustc found - install rustup
-    print_status "No Rust installation found. Installing via rustup..."
+    if command -v rustc &> /dev/null && ! command -v rustup &> /dev/null; then
+        print_warning "Found system rustc but no rustup - rustup required for WASM target"
+        print_status "Installing rustup (will use alongside system rust)..."
+    else
+        print_status "Installing Rust via rustup..."
+    fi
+
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 
-    # Source cargo env
     if [ -f "$HOME/.cargo/env" ]; then
         source "$HOME/.cargo/env"
     fi
 
-    print_success "Rust installed via rustup"
+    print_success "Rust installed"
+}
+
+# Add WASM target
+install_wasm_target() {
+    print_status "Adding WebAssembly target..."
+    rustup target add wasm32-unknown-unknown
+    print_success "WASM target ready"
 }
 
 # Install cargo-leptos
 install_cargo_leptos() {
-    if ! command -v cargo-leptos &> /dev/null; then
-        print_status "Installing cargo-leptos (this may take a while)..."
-
-        if [ "$IS_TERMUX" = true ]; then
-            # Low-memory build for Termux
-            CARGO_BUILD_JOBS=1 cargo install cargo-leptos --locked
-        else
-            cargo install cargo-leptos --locked
-        fi
-
-        print_success "cargo-leptos installed"
-    else
+    if command -v cargo-leptos &> /dev/null; then
         print_success "cargo-leptos already installed"
+        return 0
     fi
+
+    print_status "Installing cargo-leptos (this may take a few minutes)..."
+    cargo install cargo-leptos --locked
+    print_success "cargo-leptos installed"
 }
 
-# Add wasm target
-install_wasm_target() {
-    print_status "Adding WASM target..."
-    rustup target add wasm32-unknown-unknown
-    print_success "WASM target added"
-}
-
-# Configure Cargo for low-memory builds (Termux)
-configure_cargo_termux() {
-    if [ "$IS_TERMUX" = true ]; then
-        print_status "Configuring Cargo for low-memory builds..."
-
-        mkdir -p "$HOME/.cargo"
-
-        # Create or update cargo config
-        cat > "$HOME/.cargo/config.toml" << 'EOF'
-[build]
-jobs = 1
-
-[net]
-git-fetch-with-cli = true
-
-[term]
-verbose = true
-EOF
-
-        # Set environment variables for the session
-        export CARGO_BUILD_JOBS=1
-        export CARGO_INCREMENTAL=1
-
-        print_success "Cargo configured for Termux"
-    fi
-}
-
-# Clone repository
+# Clone or update repository
 clone_repo() {
     if [ -d "$INSTALL_DIR" ]; then
         print_status "Updating existing installation..."
         cd "$INSTALL_DIR"
-        git pull origin main
+        git fetch origin main
+        git reset --hard origin/main
     else
         print_status "Cloning repository..."
         git clone "$REPO_URL" "$INSTALL_DIR"
@@ -206,93 +139,57 @@ clone_repo() {
     print_success "Repository ready"
 }
 
-# Optimize Cargo.toml for Termux
-optimize_for_termux() {
-    if [ "$IS_TERMUX" = true ]; then
-        print_status "Optimizing build settings for Termux..."
-
-        # Check if profile.release already has our optimizations
-        if ! grep -q "codegen-units = 1" Cargo.toml; then
-            cat >> Cargo.toml << 'EOF'
-
-[profile.release]
-codegen-units = 1
-lto = false
-opt-level = "z"
-strip = true
-
-[profile.dev]
-opt-level = 0
-debug = false
-EOF
-        fi
-
-        print_success "Build settings optimized"
-    fi
-}
-
 # Build the project
 build_project() {
-    print_status "Building project (this will take a while)..."
-
+    print_status "Building project (this will take a few minutes on first run)..."
     cd "$INSTALL_DIR"
-
-    if [ "$IS_TERMUX" = true ]; then
-        print_warning "Building on Termux - this may take 15-30+ minutes"
-        print_warning "Keep the screen on and Termux in foreground"
-
-        # Acquire wakelock to prevent sleep
-        if command -v termux-wake-lock &> /dev/null; then
-            termux-wake-lock
-            print_status "Wake lock acquired"
-        fi
-
-        # Build with minimal resources
-        CARGO_BUILD_JOBS=1 CARGO_INCREMENTAL=1 cargo leptos build --release 2>&1 | tee build.log
-
-        # Release wakelock
-        if command -v termux-wake-unlock &> /dev/null; then
-            termux-wake-unlock
-        fi
-    else
-        cargo leptos build --release
-    fi
-
+    cargo leptos build --release
     print_success "Build complete!"
 }
 
-# Create run script
-create_run_script() {
-    print_status "Creating run script..."
+# Create launcher script
+create_launcher() {
+    print_status "Creating launcher script..."
 
     cat > "$INSTALL_DIR/run.sh" << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
-echo "Starting Ollama Rust Web UI on http://localhost:3000"
+echo "Starting Ollama Rust Web UI..."
+echo "Open http://localhost:3000 in your browser"
 ./target/release/ollama-rust
 EOF
 
     chmod +x "$INSTALL_DIR/run.sh"
-    print_success "Run script created"
+
+    # Create desktop entry
+    mkdir -p "$HOME/.local/share/applications"
+    cat > "$HOME/.local/share/applications/ollama-rust.desktop" << EOF
+[Desktop Entry]
+Name=Ollama Rust
+Comment=Web interface for Ollama
+Exec=$INSTALL_DIR/run.sh
+Terminal=true
+Type=Application
+Categories=Development;Utility;
+EOF
+
+    print_success "Launcher created"
 }
 
-# Main installation
+# Main
 main() {
     install_dependencies
     install_rust
 
-    # Source cargo env
     if [ -f "$HOME/.cargo/env" ]; then
         source "$HOME/.cargo/env"
     fi
 
-    configure_cargo_termux
     install_wasm_target
     install_cargo_leptos
     clone_repo
-    optimize_for_termux
     build_project
-    create_run_script
+    create_launcher
 
     echo ""
     echo -e "${GREEN}╔═══════════════════════════════════════╗${NC}"
@@ -300,15 +197,15 @@ main() {
     echo -e "${GREEN}╚═══════════════════════════════════════╝${NC}"
     echo ""
     echo -e "To start the server:"
-    echo -e "  ${BLUE}cd $INSTALL_DIR && ./run.sh${NC}"
+    echo -e "  ${BLUE}$INSTALL_DIR/run.sh${NC}"
     echo ""
-    echo -e "Or manually:"
-    echo -e "  ${BLUE}cd $INSTALL_DIR${NC}"
-    echo -e "  ${BLUE}cargo leptos serve --release${NC}"
+    echo -e "Or use cargo:"
+    echo -e "  ${BLUE}cd $INSTALL_DIR && cargo leptos serve --release${NC}"
     echo ""
     echo -e "Then open ${GREEN}http://localhost:3000${NC} in your browser"
     echo ""
+    echo -e "A desktop entry has been created - search for 'Ollama Rust' in your app menu"
+    echo ""
 }
 
-# Run main
 main

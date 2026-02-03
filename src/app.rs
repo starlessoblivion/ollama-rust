@@ -1685,9 +1685,9 @@ pub fn App() -> impl IntoView {
                                     set_status_dropdown_open.update(|v| *v = !*v);
                                 }>
                             <span class="status-dot"
-                                  class:status-green=move || ollama_running.get()
+                                  class:status-green=move || ollama_running.get() && !(brave_search_enabled.get() && brave_api_token.get().trim().is_empty())
                                   class:status-red=move || !ollama_running.get()
-                                  class:status-yellow=move || toggle_pending.get()>
+                                  class:status-yellow=move || toggle_pending.get() || (brave_search_enabled.get() && brave_api_token.get().trim().is_empty())>
                             </span>
                             "Status"
                         </button>
