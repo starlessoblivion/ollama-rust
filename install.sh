@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Ollama Rust Web UI Installer
+# Version: 1.1.0
 # Optimized for Termux/Android and standard Linux
 #
 # Usage: curl -fsSL https://raw.githubusercontent.com/starlessoblivion/ollama-rust/main/install.sh | bash
