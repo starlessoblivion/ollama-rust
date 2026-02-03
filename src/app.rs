@@ -946,6 +946,51 @@ pub fn App() -> impl IntoView {
         }
     });
 
+    // Auto-focus input on mount and after streaming ends
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::JsCast;
+
+        // Focus on mount
+        Effect::new(move |_| {
+            if let Some(window) = web_sys::window() {
+                if let Some(document) = window.document() {
+                    if let Some(input) = document.get_element_by_id("prompt-input") {
+                        if let Some(textarea) = input.dyn_ref::<web_sys::HtmlTextAreaElement>() {
+                            let _ = textarea.focus();
+                        }
+                    }
+                }
+            }
+        });
+
+        // Re-focus when streaming ends
+        Effect::new(move |_| {
+            let streaming = is_streaming.get();
+            if !streaming {
+                // Small delay to ensure DOM is ready
+                if let Some(window) = web_sys::window() {
+                    let cb = wasm_bindgen::closure::Closure::wrap(Box::new(move || {
+                        if let Some(window) = web_sys::window() {
+                            if let Some(document) = window.document() {
+                                if let Some(input) = document.get_element_by_id("prompt-input") {
+                                    if let Some(textarea) = input.dyn_ref::<web_sys::HtmlTextAreaElement>() {
+                                        let _ = textarea.focus();
+                                    }
+                                }
+                            }
+                        }
+                    }) as Box<dyn Fn()>);
+                    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                        cb.as_ref().unchecked_ref(),
+                        100,
+                    );
+                    cb.forget();
+                }
+            }
+        });
+    }
+
     // OAuth login handler
     let do_oauth_login = move |provider: String| {
         set_cloud_login_pending.set(true);
@@ -2080,6 +2125,7 @@ pub fn App() -> impl IntoView {
                     id="prompt-input"
                     placeholder="Type your message..."
                     rows="1"
+                    autofocus=true
                     prop:value=move || input.get()
                     on:input=move |ev| set_input.set(event_target_value(&ev))
                     on:keydown=move |ev: web_sys::KeyboardEvent| {

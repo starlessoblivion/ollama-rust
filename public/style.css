@@ -456,16 +456,27 @@ body {
 
 .status-menu {
     position: absolute;
-    top: calc(100% + 8px);
+    top: calc(100% + 4px);
     right: 0;
     background: var(--bg-menu);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 0.5rem;
+    padding-top: 0.75rem; /* Extra padding for hitbox */
     min-width: 200px;
     box-shadow: 0 6px 20px var(--shadow-menu);
     z-index: 1000;
     color: var(--text-primary);
+}
+
+/* Bridge to prevent menu closing when moving from button */
+.status-menu::before {
+    content: "";
+    position: absolute;
+    top: -10px;
+    left: 0;
+    right: 0;
+    height: 15px;
 }
 
 .status-menu.hidden {
@@ -502,13 +513,24 @@ body {
 
 .brave-submenu {
     position: absolute;
-    top: 0;
-    right: calc(100% + 8px);
+    top: -10px;
+    right: calc(100% + 2px);
     z-index: 1001;
+    padding-right: 15px; /* Extends hitbox toward toggle */
 }
 
 .brave-submenu.hidden {
     display: none;
+}
+
+/* Bridge between toggle row and submenu */
+.brave-submenu::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 20px;
+    height: 100%;
 }
 
 .brave-submenu-content {
@@ -735,14 +757,25 @@ body {
 /* Model menu */
 .model-menu {
     position: absolute;
-    top: calc(100% + 8px);
+    top: calc(100% + 4px);
     left: 0;
     z-index: 1000;
     display: none;
+    padding-top: 8px; /* Extends hitbox upward */
 }
 
 .model-menu:not(.hidden) {
     display: block;
+}
+
+/* Bridge to prevent menu closing when moving to submenu */
+.model-menu::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -20px;
+    right: -20px;
+    height: 20px;
 }
 
 .runner-list {
@@ -774,12 +807,13 @@ body {
 /* Models panel */
 .models-panel {
     position: absolute;
-    top: 0;
-    left: calc(100% + 8px);
+    top: -10px;
+    left: calc(100% + 2px);
     background: var(--bg-menu);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 0.5rem;
+    padding-left: 1rem; /* Extra padding on left for hitbox */
     min-width: 180px;
     max-width: 280px;
     box-shadow: 0 6px 20px var(--shadow-menu);
@@ -787,6 +821,16 @@ body {
     overflow-y: auto;
     display: none;
     color: var(--text-primary);
+}
+
+/* Bridge between runner-item and models-panel */
+.models-panel::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -15px;
+    width: 20px;
+    height: 100%;
 }
 
 .models-panel:not(.hidden) {
