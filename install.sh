@@ -74,11 +74,12 @@ install_rust() {
     # Check if rustup is available
     if command -v rustup &> /dev/null; then
         # Ensure a default toolchain is set
-        if ! rustc --version &> /dev/null; then
+        if ! rustup show active-toolchain &> /dev/null; then
             print_status "Setting up default Rust toolchain..."
             rustup default stable
         fi
-        print_success "Using existing rustup: $(rustc --version)"
+        RUST_VER=$(rustc --version 2>/dev/null || echo "installed")
+        print_success "Using existing rustup: $RUST_VER"
         return 0
     fi
 
