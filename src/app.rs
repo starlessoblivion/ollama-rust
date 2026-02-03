@@ -476,8 +476,10 @@ pub fn App() -> impl IntoView {
                                 for line in text.lines() {
                                     if line.starts_with("data:") {
                                         let data = line.trim_start_matches("data:").trim();
-                                        if data == "__END__" {
-                                            set_is_streaming.set(false);
+                                        if data == "__END__" || data.is_empty() {
+                                            if data == "__END__" {
+                                                set_is_streaming.set(false);
+                                            }
                                             break;
                                         }
                                         full_text.push_str(data);
