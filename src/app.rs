@@ -57,6 +57,17 @@ pub struct PullProgress {
     pub last_update: i64, // timestamp for speed calculation
 }
 
+// Global state for tracking pull progress (simple approach using lazy_static would be better but this works)
+use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+static PULL_PROGRESS: OnceLock<Mutex<HashMap<String, PullProgress>>> = OnceLock::new();
+
+fn get_progress_store() -> &'static Mutex<HashMap<String, PullProgress>> {
+    PULL_PROGRESS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 #[server]
 pub async fn start_model_pull(model_name: String) -> Result<PullProgress, ServerFnError> {
     use std::process::Command;
@@ -81,12 +92,100 @@ pub async fn start_model_pull(model_name: String) -> Result<PullProgress, Server
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
     }
 
-    // Start the pull in background using spawn
     let model = model_name.trim().to_string();
+    let model_clone = model.clone();
+
+    // Initialize progress
+    {
+        let store = get_progress_store();
+        let mut map = store.lock().unwrap();
+        map.insert(model.clone(), PullProgress {
+            model: model.clone(),
+            status: "Starting...".to_string(),
+            percent: 0.0,
+            done: false,
+            error: None,
+            bytes_downloaded: 0,
+            speed: "".to_string(),
+            last_update: 0,
+        });
+    }
+
+    // Start the pull using Ollama API (streams JSON progress)
     tokio::spawn(async move {
-        let _ = Command::new("ollama")
-            .args(["pull", &model])
-            .output();
+        let client = reqwest::Client::new();
+        let res = client.post("http://localhost:11434/api/pull")
+            .json(&serde_json::json!({ "name": model_clone }))
+            .send()
+            .await;
+
+        match res {
+            Ok(response) => {
+                use futures::StreamExt;
+                let mut stream = response.bytes_stream();
+
+                while let Some(chunk) = stream.next().await {
+                    if let Ok(bytes) = chunk {
+                        let text = String::from_utf8_lossy(&bytes);
+                        // Parse each line as JSON
+                        for line in text.lines() {
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
+                                let store = get_progress_store();
+                                let mut map = store.lock().unwrap();
+
+                                let status_text = json["status"].as_str().unwrap_or("").to_string();
+                                let total = json["total"].as_u64().unwrap_or(0);
+                                let completed = json["completed"].as_u64().unwrap_or(0);
+
+                                let percent = if total > 0 {
+                                    (completed as f32 / total as f32) * 100.0
+                                } else {
+                                    0.0
+                                };
+
+                                // Calculate speed from completed bytes
+                                let speed = if total > 0 && completed > 0 && completed < total {
+                                    format_bytes(completed) + " / " + &format_bytes(total)
+                                } else {
+                                    "".to_string()
+                                };
+
+                                let is_done = status_text == "success" || json.get("error").is_some();
+                                let error = json["error"].as_str().map(|s| s.to_string());
+
+                                map.insert(model_clone.clone(), PullProgress {
+                                    model: model_clone.clone(),
+                                    status: if is_done && error.is_none() { "Complete".to_string() } else { status_text },
+                                    percent: if is_done && error.is_none() { 100.0 } else { percent },
+                                    done: is_done,
+                                    error,
+                                    bytes_downloaded: completed,
+                                    speed,
+                                    last_update: std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs() as i64,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                let store = get_progress_store();
+                let mut map = store.lock().unwrap();
+                map.insert(model_clone.clone(), PullProgress {
+                    model: model_clone,
+                    status: "Error".to_string(),
+                    percent: 0.0,
+                    done: true,
+                    error: Some(e.to_string()),
+                    bytes_downloaded: 0,
+                    speed: "".to_string(),
+                    last_update: 0,
+                });
+            }
+        }
     });
 
     Ok(PullProgress {
@@ -101,18 +200,44 @@ pub async fn start_model_pull(model_name: String) -> Result<PullProgress, Server
     })
 }
 
+fn format_bytes(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+
+    if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{} B", bytes)
+    }
+}
+
 #[server]
 pub async fn check_pull_progress(model_name: String) -> Result<PullProgress, ServerFnError> {
-    // Check if model exists now (indicates pull completed)
-    let status = get_ollama_status().await?;
+    let model = model_name.trim().to_string();
 
+    // Check progress store first
+    {
+        let store = get_progress_store();
+        let map = store.lock().unwrap();
+        if let Some(progress) = map.get(&model) {
+            return Ok(progress.clone());
+        }
+    }
+
+    // Fallback: check if model exists (might have been pulled before tracking)
+    let status = get_ollama_status().await?;
     let model_exists = status.models.iter().any(|m| {
-        m.starts_with(model_name.trim()) || m.contains(&model_name)
+        m.starts_with(&model) || m.contains(&model)
     });
 
     if model_exists {
         Ok(PullProgress {
-            model: model_name,
+            model,
             status: "Complete".to_string(),
             percent: 100.0,
             done: true,
@@ -122,37 +247,16 @@ pub async fn check_pull_progress(model_name: String) -> Result<PullProgress, Ser
             last_update: 0,
         })
     } else {
-        // Still downloading - check if ollama pull process is running
-        let output = std::process::Command::new("pgrep")
-            .args(["-f", &format!("ollama pull {}", model_name.trim())])
-            .output();
-
-        let is_running = output.map(|o| o.status.success()).unwrap_or(false);
-
-        if is_running {
-            Ok(PullProgress {
-                model: model_name,
-                status: "Downloading...".to_string(),
-                percent: 50.0, // We can't get exact progress easily
-                done: false,
-                error: None,
-                bytes_downloaded: 0,
-                speed: "".to_string(),
-                last_update: 0,
-            })
-        } else {
-            // Process not running and model not found - might have failed or not started yet
-            Ok(PullProgress {
-                model: model_name,
-                status: "Checking...".to_string(),
-                percent: 25.0,
-                done: false,
-                error: None,
-                bytes_downloaded: 0,
-                speed: "".to_string(),
-last_update: 0,
-            })
-        }
+        Ok(PullProgress {
+            model,
+            status: "Waiting...".to_string(),
+            percent: 0.0,
+            done: false,
+            error: None,
+            bytes_downloaded: 0,
+            speed: "".to_string(),
+            last_update: 0,
+        })
     }
 }
 
@@ -802,8 +906,8 @@ pub fn App() -> impl IntoView {
                         let percent = dl.percent;
                         let speed = dl.speed.clone();
 
-                        let is_downloading = status_for_check != "Complete" && status_for_check != "Error";
                         let is_complete = status_for_check == "Complete";
+                        let percent_display = format!("{:.0}%", percent);
 
                         view! {
                             <div class="download-progress-bar">
@@ -811,15 +915,12 @@ pub fn App() -> impl IntoView {
                                     <span class="download-model">{model_name}</span>
                                     <span class="download-status"
                                           class:download-complete=is_complete>
-                                        {if is_downloading {
-                                            view! { <span class="download-spinner"></span> }.into_any()
-                                        } else {
-                                            view! { <></> }.into_any()
-                                        }}
                                         {status}
                                     </span>
                                     {if !speed.is_empty() {
                                         view! { <span class="download-speed">{speed}</span> }.into_any()
+                                    } else if !is_complete && percent > 0.0 {
+                                        view! { <span class="download-speed">{percent_display}</span> }.into_any()
                                     } else {
                                         view! { <></> }.into_any()
                                     }}
