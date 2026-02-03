@@ -802,15 +802,24 @@ pub fn App() -> impl IntoView {
                         let percent = dl.percent;
                         let speed = dl.speed.clone();
 
+                        let is_downloading = status_for_check != "Complete" && status_for_check != "Error";
+                        let is_complete = status_for_check == "Complete";
+
                         view! {
                             <div class="download-progress-bar">
                                 <div class="download-info">
                                     <span class="download-model">{model_name}</span>
-                                    <span class="download-status">{status}</span>
+                                    <span class="download-status"
+                                          class:download-complete=is_complete>
+                                        {if is_downloading {
+                                            view! { <span class="download-spinner"></span> }.into_any()
+                                        } else {
+                                            view! { <></> }.into_any()
+                                        }}
+                                        {status}
+                                    </span>
                                     {if !speed.is_empty() {
                                         view! { <span class="download-speed">{speed}</span> }.into_any()
-                                    } else if status_for_check == "Downloading..." {
-                                        view! { <span class="download-speed spinning">...</span> }.into_any()
                                     } else {
                                         view! { <></> }.into_any()
                                     }}
