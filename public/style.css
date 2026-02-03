@@ -487,6 +487,14 @@ body {
     flex: 1;
 }
 
+.download-speed {
+    color: #4CAF50;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-right: 0.5rem;
+    min-width: 60px;
+}
+
 .download-dismiss {
     background: none;
     border: none;

@@ -52,6 +52,9 @@ pub struct PullProgress {
     pub percent: f32,
     pub done: bool,
     pub error: Option<String>,
+    pub bytes_downloaded: u64,
+    pub speed: String,
+    pub last_update: i64, // timestamp for speed calculation
 }
 
 #[server]
@@ -65,6 +68,9 @@ pub async fn start_model_pull(model_name: String) -> Result<PullProgress, Server
             percent: 0.0,
             done: true,
             error: Some("Model name cannot be empty".to_string()),
+            bytes_downloaded: 0,
+            speed: "".to_string(),
+            last_update: 0,
         });
     }
 
@@ -89,6 +95,9 @@ pub async fn start_model_pull(model_name: String) -> Result<PullProgress, Server
         percent: 0.0,
         done: false,
         error: None,
+        bytes_downloaded: 0,
+        speed: "".to_string(),
+        last_update: 0,
     })
 }
 
@@ -108,6 +117,9 @@ pub async fn check_pull_progress(model_name: String) -> Result<PullProgress, Ser
             percent: 100.0,
             done: true,
             error: None,
+            bytes_downloaded: 0,
+            speed: "".to_string(),
+            last_update: 0,
         })
     } else {
         // Still downloading - check if ollama pull process is running
@@ -124,6 +136,9 @@ pub async fn check_pull_progress(model_name: String) -> Result<PullProgress, Ser
                 percent: 50.0, // We can't get exact progress easily
                 done: false,
                 error: None,
+                bytes_downloaded: 0,
+                speed: "".to_string(),
+                last_update: 0,
             })
         } else {
             // Process not running and model not found - might have failed or not started yet
@@ -133,6 +148,9 @@ pub async fn check_pull_progress(model_name: String) -> Result<PullProgress, Ser
                 percent: 25.0,
                 done: false,
                 error: None,
+                bytes_downloaded: 0,
+                speed: "".to_string(),
+last_update: 0,
             })
         }
     }
@@ -301,6 +319,9 @@ pub fn App() -> impl IntoView {
                 percent: 0.0,
                 done: false,
                 error: None,
+                bytes_downloaded: 0,
+                speed: "".to_string(),
+                last_update: 0,
             });
         });
 
@@ -335,10 +356,35 @@ pub fn App() -> impl IntoView {
 
                         set_active_downloads.update(|downloads| {
                             if let Some(d) = downloads.iter_mut().find(|d| d.model == model_clone) {
+                                // Calculate download speed
+                                let now = js_sys::Date::now() as i64;
+                                let time_diff = if d.last_update > 0 { (now - d.last_update) / 1000 } else { 0 };
+                                let percent_diff = progress.percent - d.percent;
+                                
+                                // Estimate speed based on percent change (rough estimate)
+                                let speed_str = if time_diff > 0 && percent_diff > 0.0 {
+                                    // Assume models are roughly 4GB for estimation
+                                    let estimated_bytes = (percent_diff / 100.0) * 4_000_000_000.0;
+                                    let bytes_per_sec = estimated_bytes / (time_diff as f32);
+                                    if bytes_per_sec > 1_000_000_000.0 {
+                                        format!("{:.1} GB/s", bytes_per_sec / 1_000_000_000.0)
+                                    } else if bytes_per_sec > 1_000_000.0 {
+                                        format!("{:.1} MB/s", bytes_per_sec / 1_000_000.0)
+                                    } else if bytes_per_sec > 1_000.0 {
+                                        format!("{:.1} KB/s", bytes_per_sec / 1_000.0)
+                                    } else {
+                                        format!("{:.0} B/s", bytes_per_sec)
+                                    }
+                                } else {
+                                    "".to_string()
+                                };
+
                                 d.status = progress.status;
                                 d.percent = progress.percent;
                                 d.done = progress.done;
                                 d.error = progress.error;
+                                d.speed = speed_str;
+                                d.last_update = now;
                             }
                         });
 
@@ -752,12 +798,18 @@ pub fn App() -> impl IntoView {
                         let model_for_remove = dl.model.clone();
                         let status = dl.status.clone();
                         let percent = dl.percent;
+                        let speed = dl.speed.clone();
 
                         view! {
                             <div class="download-progress-bar">
                                 <div class="download-info">
                                     <span class="download-model">{model_name}</span>
                                     <span class="download-status">{status}</span>
+                                    {if !speed.is_empty() {
+                                        view! { <span class="download-speed">{speed}</span> }.into_any()
+                                    } else {
+                                        view! { <></> }.into_any()
+                                    }}
                                     <button class="download-dismiss"
                                             on:click=move |_| {
                                                 set_active_downloads.update(|downloads| {
