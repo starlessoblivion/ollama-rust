@@ -475,7 +475,7 @@ pub fn App() -> impl IntoView {
                                 // Parse SSE format
                                 for line in text.lines() {
                                     if line.starts_with("data:") {
-                                        let data = line.trim_start_matches("data:");
+                                        let data = line.trim_start_matches("data:").trim();
                                         if data == "__END__" {
                                             set_is_streaming.set(false);
                                             break;
