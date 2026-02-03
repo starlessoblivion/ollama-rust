@@ -43,6 +43,37 @@ async fn stream_handler(
     use tokio_util::codec::{FramedRead, LinesCodec};
     use tokio_util::io::StreamReader;
 
+    // Check if this is a cloud model request
+    if payload.model.starts_with("cloud:") {
+        let cloud_model = payload.model.strip_prefix("cloud:").unwrap_or(&payload.model);
+
+        // For demo purposes, simulate a cloud model response
+        // In production, this would call the actual Ollama Cloud API
+        let response_text = format!(
+            "[Cloud Demo] You asked: \"{}\"\n\n\
+            This is a simulated response from cloud model '{}'. \
+            In a production environment, this would connect to the actual Ollama Cloud API \
+            to process your request using cloud-hosted models.\n\n\
+            To use real cloud models, you'll need to:\n\
+            1. Sign up for Ollama Cloud at ollama.com\n\
+            2. Get your API credentials\n\
+            3. Configure the cloud endpoint in your settings",
+            payload.prompt.chars().take(100).collect::<String>(),
+            cloud_model
+        );
+
+        let stream = async_stream::stream! {
+            // Stream the response word by word for a more realistic effect
+            for word in response_text.split_whitespace() {
+                yield Ok(axum::response::sse::Event::default().data(format!("{} ", word)));
+                tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
+            }
+            yield Ok(axum::response::sse::Event::default().data("__END__"));
+        };
+        return axum::response::sse::Sse::new(Box::pin(stream));
+    }
+
+    // Local Ollama model request
     let client = reqwest::Client::new();
     let res = client
         .post("http://localhost:11434/api/generate")

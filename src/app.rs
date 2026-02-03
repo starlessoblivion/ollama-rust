@@ -1236,7 +1236,7 @@ pub fn App() -> impl IntoView {
                                          ev.stop_propagation();
                                          set_models_panel_open.set(true);
                                      }>
-                                    <div class="runner-name">"ollama"</div>
+                                    <div class="runner-name">"ollama local"</div>
 
                                     <div id="models-panel"
                                          class="models-panel"
