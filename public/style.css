@@ -846,6 +846,13 @@ body {
     cursor: wait;
 }
 
+/* Cloud model warning */
+.cloud-warning {
+    margin-left: 0.5rem;
+    cursor: help;
+    font-size: 0.9rem;
+}
+
 /* Add Model UI */
 .add-model-section {
     margin-bottom: 0.25rem;

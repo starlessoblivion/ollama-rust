@@ -712,6 +712,12 @@ pub fn App() -> impl IntoView {
                     if let Ok(Some(token)) = storage.get_item("brave_api_token") {
                         set_brave_api_token.set(token);
                     }
+                    // Load last selected model
+                    if let Ok(Some(saved_model)) = storage.get_item("selected_model") {
+                        if !saved_model.is_empty() {
+                            set_selected_model.set(Some(saved_model));
+                        }
+                    }
                 }
             }
         });
@@ -913,11 +919,19 @@ pub fn App() -> impl IntoView {
         }
     });
 
-    // Auto-select first model when status loads
+    // Auto-select model when status loads (respect saved preference or pick first)
     Effect::new(move |_| {
         if let Some(Ok(status)) = status_resource.get() {
-            if selected_model.get().is_none() && !status.models.is_empty() {
-                set_selected_model.set(Some(status.models[0].clone()));
+            if !status.models.is_empty() {
+                let current = selected_model.get();
+                // If no model selected, or selected model no longer exists, pick one
+                let should_select = match &current {
+                    None => true,
+                    Some(model) => !status.models.iter().any(|m| m == model),
+                };
+                if should_select {
+                    set_selected_model.set(Some(status.models[0].clone()));
+                }
             }
         }
     });
@@ -1180,9 +1194,17 @@ pub fn App() -> impl IntoView {
         }
     };
 
-    // Select model
+    // Select model and persist to localStorage
     let select_model = move |model: String| {
-        set_selected_model.set(Some(model));
+        set_selected_model.set(Some(model.clone()));
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(window) = web_sys::window() {
+                if let Ok(Some(storage)) = window.local_storage() {
+                    let _ = storage.set_item("selected_model", &model);
+                }
+            }
+        }
         close_menus();
     };
 
@@ -1328,6 +1350,7 @@ pub fn App() -> impl IntoView {
                                                                             let m_display = model.clone();
                                                                             let m_delete = model.clone();
                                                                             let m_delete_for_closure = m_delete.clone();
+                                                                            let is_cloud_model = model.to_lowercase().contains("cloud");
                                                                             let is_deleting = move || {
                                                                                 deleting_model.get().as_ref() == Some(&m_delete_for_closure)
                                                                             };
@@ -1343,6 +1366,13 @@ pub fn App() -> impl IntoView {
                                                                                              select_model(m_touch.clone());
                                                                                          }>
                                                                                         {m_display}
+                                                                                        {if is_cloud_model {
+                                                                                            view! {
+                                                                                                <span class="cloud-warning" title="Cloud models not supported at this time">"⚠️"</span>
+                                                                                            }.into_any()
+                                                                                        } else {
+                                                                                            view! { <></> }.into_any()
+                                                                                        }}
                                                                                     </div>
                                                                                     <button
                                                                                         class="model-delete-btn"
@@ -1369,8 +1399,9 @@ pub fn App() -> impl IntoView {
                                     </div>
                                 </div>
 
-                                // Ollama Cloud runner item
-                                <div class="runner-item cloud-runner"
+                                // Ollama Cloud runner item - HIDDEN (cloud not yet supported)
+                                // To re-enable, remove the style="display:none"
+                                <div class="runner-item cloud-runner" style="display:none"
                                      on:mouseenter=move |ev: web_sys::MouseEvent| {
                                          ev.stop_propagation();
                                          set_cloud_panel_open.set(true);
