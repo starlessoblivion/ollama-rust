@@ -686,7 +686,7 @@ pub fn App() -> impl IntoView {
                                                                                     <button
                                                                                         class="model-delete-btn"
                                                                                         title="Delete model"
-                                                                                        disabled=is_deleting
+                                                                                        disabled=move || is_deleting()
                                                                                         on:click=move |ev: web_sys::MouseEvent| {
                                                                                             ev.stop_propagation();
                                                                                             do_delete_model(m_delete.clone());
