@@ -139,6 +139,24 @@ pub async fn check_pull_progress(model_name: String) -> Result<PullProgress, Ser
 }
 
 #[server]
+pub async fn delete_model(model_name: String) -> Result<bool, ServerFnError> {
+    use std::process::Command;
+
+    if model_name.trim().is_empty() {
+        return Ok(false);
+    }
+
+    let output = Command::new("ollama")
+        .args(["rm", model_name.trim()])
+        .output();
+
+    match output {
+        Ok(out) => Ok(out.status.success()),
+        Err(_) => Ok(false),
+    }
+}
+
+#[server]
 pub async fn get_ollama_status() -> Result<StatusResponse, ServerFnError> {
     let client = reqwest::Client::new();
 
@@ -228,6 +246,7 @@ pub fn App() -> impl IntoView {
     let (show_add_model, set_show_add_model) = signal(false);
     let (new_model_name, set_new_model_name) = signal(String::new());
     let (active_downloads, set_active_downloads) = signal::<Vec<PullProgress>>(vec![]);
+    let (deleting_model, set_deleting_model) = signal::<Option<String>>(None);
 
     // Resources
     let status_resource = Resource::new(|| (), |_| get_ollama_status());
@@ -237,6 +256,30 @@ pub fn App() -> impl IntoView {
     let toggle_action = Action::new(move |_: &()| async move {
         toggle_ollama_service().await
     });
+
+    // Delete model action
+    let do_delete_model = move |model_name: String| {
+        if model_name.trim().is_empty() {
+            return;
+        }
+
+        set_deleting_model.set(Some(model_name.clone()));
+
+        let model = model_name.clone();
+        spawn_local(async move {
+            if let Ok(success) = delete_model(model.clone()).await {
+                if success {
+                    // Clear selected model if it was deleted
+                    if selected_model.get().as_ref() == Some(&model) {
+                        set_selected_model.set(None);
+                    }
+                    // Refresh models list
+                    status_resource.refetch();
+                }
+            }
+            set_deleting_model.set(None);
+        });
+    };
 
     // Start download action
     let start_download = move |model_name: String| {
@@ -622,17 +665,33 @@ pub fn App() -> impl IntoView {
                                                                             let m_click = model.clone();
                                                                             let m_touch = model.clone();
                                                                             let m_display = model.clone();
+                                                                            let m_delete = model.clone();
+                                                                            let is_deleting = move || {
+                                                                                deleting_model.get().as_ref() == Some(&m_delete)
+                                                                            };
                                                                             view! {
-                                                                                <div class="model-option"
-                                                                                     on:click=move |ev: web_sys::MouseEvent| {
-                                                                                         ev.stop_propagation();
-                                                                                         select_model(m_click.clone());
-                                                                                     }
-                                                                                     on:touchend=move |ev: web_sys::TouchEvent| {
-                                                                                         ev.stop_propagation();
-                                                                                         select_model(m_touch.clone());
-                                                                                     }>
-                                                                                    {m_display}
+                                                                                <div class="model-option-row">
+                                                                                    <div class="model-option"
+                                                                                         on:click=move |ev: web_sys::MouseEvent| {
+                                                                                             ev.stop_propagation();
+                                                                                             select_model(m_click.clone());
+                                                                                         }
+                                                                                         on:touchend=move |ev: web_sys::TouchEvent| {
+                                                                                             ev.stop_propagation();
+                                                                                             select_model(m_touch.clone());
+                                                                                         }>
+                                                                                        {m_display}
+                                                                                    </div>
+                                                                                    <button
+                                                                                        class="model-delete-btn"
+                                                                                        title="Delete model"
+                                                                                        disabled=is_deleting
+                                                                                        on:click=move |ev: web_sys::MouseEvent| {
+                                                                                            ev.stop_propagation();
+                                                                                            do_delete_model(m_delete.clone());
+                                                                                        }>
+                                                                                        {move || if is_deleting() { "..." } else { "🗑" }}
+                                                                                    </button>
                                                                                 </div>
                                                                             }
                                                                         }).collect_view()}

@@ -311,6 +311,46 @@ body {
     background-color: #f0f0f0;
 }
 
+/* Model row with delete button */
+.model-option-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.model-option-row .model-option {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.model-delete-btn {
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.85rem;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.15s, background-color 0.15s;
+}
+
+.model-option-row:hover .model-delete-btn {
+    opacity: 1;
+}
+
+.model-delete-btn:hover {
+    background: #fee;
+    color: #c00;
+}
+
+.model-delete-btn:disabled {
+    opacity: 0.5;
+    cursor: wait;
+}
+
 /* Add Model UI */
 .add-model-section {
     margin-bottom: 0.25rem;
