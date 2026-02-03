@@ -529,6 +529,7 @@ pub fn App() -> impl IntoView {
                                             break;
                                         }
                                         full_text.push_str(data);
+                                        full_text.push(' '); // Add space between chunks
 
                                         let current_text = full_text.clone();
                                         set_messages.update(|msgs| {
