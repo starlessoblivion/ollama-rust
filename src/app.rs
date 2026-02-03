@@ -810,7 +810,7 @@ pub fn App() -> impl IntoView {
                                     {if !speed.is_empty() {
                                         view! { <span class="download-speed">{speed}</span> }.into_any()
                                     } else if status_for_check == "Downloading..." {
-                                        view! { <span class="download-speed spinning">↓</span> }.into_any()
+                                        view! { <span class="download-speed spinning">...</span> }.into_any()
                                     } else {
                                         view! { <></> }.into_any()
                                     }}
