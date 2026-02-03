@@ -311,6 +311,93 @@ body {
     background-color: #f0f0f0;
 }
 
+/* Add Model UI */
+.add-model-section {
+    margin-bottom: 0.25rem;
+}
+
+.add-model-option {
+    color: #001f3f;
+    font-weight: 600;
+}
+
+.add-model-input-row {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+}
+
+.add-model-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.85rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-family: inherit;
+}
+
+.add-model-input:focus {
+    outline: 2px solid #001f3f;
+    border-color: #001f3f;
+}
+
+.add-model-btn {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.8rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.pull-btn {
+    background: #001f3f;
+    color: white;
+}
+
+.pull-btn:hover {
+    background: #003366;
+}
+
+.pull-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.cancel-btn {
+    background: #e5e5e5;
+    color: #333;
+}
+
+.cancel-btn:hover {
+    background: #d0d0d0;
+}
+
+.pull-status {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.8rem;
+    color: #666;
+    word-break: break-word;
+}
+
+.model-divider {
+    height: 1px;
+    background: #e5e5e5;
+    margin: 0.5rem 0;
+}
+
+.no-models, .loading-models, .error-models {
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    color: #888;
+    text-align: center;
+}
+
+.error-models {
+    color: #e74c3c;
+}
+
 /* Message prefix */
 .msg-prefix {
     font-weight: 700;

@@ -44,6 +44,62 @@ pub async fn get_hostname() -> Result<String, ServerFnError> {
     Ok("ollama".to_string())
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PullResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+#[server]
+pub async fn pull_model(model_name: String) -> Result<PullResponse, ServerFnError> {
+    use std::process::Command;
+
+    if model_name.trim().is_empty() {
+        return Ok(PullResponse {
+            success: false,
+            message: "Model name cannot be empty".to_string(),
+        });
+    }
+
+    // First ensure Ollama is running
+    let status = get_ollama_status().await?;
+    if !status.running {
+        // Start Ollama serve
+        let _ = Command::new("ollama")
+            .arg("serve")
+            .spawn();
+
+        // Wait for it to start
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    }
+
+    // Run ollama pull
+    let output = Command::new("ollama")
+        .args(["pull", model_name.trim()])
+        .output();
+
+    match output {
+        Ok(out) => {
+            if out.status.success() {
+                Ok(PullResponse {
+                    success: true,
+                    message: format!("Successfully pulled {}", model_name),
+                })
+            } else {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                Ok(PullResponse {
+                    success: false,
+                    message: format!("Failed to pull {}: {}", model_name, stderr),
+                })
+            }
+        }
+        Err(e) => Ok(PullResponse {
+            success: false,
+            message: format!("Error running ollama pull: {}", e),
+        }),
+    }
+}
+
 #[server]
 pub async fn get_ollama_status() -> Result<StatusResponse, ServerFnError> {
     let client = reqwest::Client::new();
@@ -131,6 +187,9 @@ pub fn App() -> impl IntoView {
     let (models_panel_open, set_models_panel_open) = signal(false);
     let (ollama_running, set_ollama_running) = signal(false);
     let (toggle_pending, set_toggle_pending) = signal(false);
+    let (show_add_model, set_show_add_model) = signal(false);
+    let (new_model_name, set_new_model_name) = signal(String::new());
+    let (pull_status, set_pull_status) = signal::<Option<String>>(None);
 
     // Resources
     let status_resource = Resource::new(|| (), |_| get_ollama_status());
@@ -139,6 +198,36 @@ pub fn App() -> impl IntoView {
     // Toggle action
     let toggle_action = Action::new(move |_: &()| async move {
         toggle_ollama_service().await
+    });
+
+    // Pull model action
+    let pull_action = Action::new(move |model: &String| {
+        let model = model.clone();
+        async move {
+            pull_model(model).await
+        }
+    });
+
+    // Handle pull completion
+    Effect::new(move |_| {
+        if let Some(result) = pull_action.value().get() {
+            match result {
+                Ok(response) => {
+                    set_pull_status.set(Some(response.message.clone()));
+                    if response.success {
+                        // Refresh models list
+                        status_resource.refetch();
+                        set_new_model_name.set(String::new());
+                        set_show_add_model.set(false);
+                        // Also update running state
+                        set_ollama_running.set(true);
+                    }
+                }
+                Err(e) => {
+                    set_pull_status.set(Some(format!("Error: {}", e)));
+                }
+            }
+        }
     });
 
     // Update running state when status loads
@@ -352,35 +441,111 @@ pub fn App() -> impl IntoView {
                                          class="models-panel"
                                          class:hidden=move || !models_panel_open.get()
                                          on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()>
-                                        <Suspense fallback=move || view! { <div>"Loading..."</div> }>
+                                        // Add Model section
+                                        <div class="add-model-section">
+                                            {move || if show_add_model.get() {
+                                                view! {
+                                                    <div class="add-model-input-row">
+                                                        <input
+                                                            type="text"
+                                                            class="add-model-input"
+                                                            placeholder="model name (e.g. llama3)"
+                                                            prop:value=move || new_model_name.get()
+                                                            on:input=move |ev| set_new_model_name.set(event_target_value(&ev))
+                                                            on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()
+                                                            on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                                                ev.stop_propagation();
+                                                                if ev.key() == "Enter" {
+                                                                    let name = new_model_name.get();
+                                                                    if !name.trim().is_empty() {
+                                                                        set_pull_status.set(Some(format!("Pulling {}...", name)));
+                                                                        pull_action.dispatch(name);
+                                                                    }
+                                                                }
+                                                            }
+                                                        />
+                                                        <button
+                                                            class="add-model-btn pull-btn"
+                                                            on:click=move |ev: web_sys::MouseEvent| {
+                                                                ev.stop_propagation();
+                                                                let name = new_model_name.get();
+                                                                if !name.trim().is_empty() {
+                                                                    set_pull_status.set(Some(format!("Pulling {}...", name)));
+                                                                    pull_action.dispatch(name);
+                                                                }
+                                                            }
+                                                            disabled=move || pull_action.pending().get()
+                                                        >
+                                                            {move || if pull_action.pending().get() { "..." } else { "Pull" }}
+                                                        </button>
+                                                        <button
+                                                            class="add-model-btn cancel-btn"
+                                                            on:click=move |ev: web_sys::MouseEvent| {
+                                                                ev.stop_propagation();
+                                                                set_show_add_model.set(false);
+                                                                set_new_model_name.set(String::new());
+                                                                set_pull_status.set(None);
+                                                            }
+                                                        >
+                                                            "✕"
+                                                        </button>
+                                                    </div>
+                                                    {move || pull_status.get().map(|status| view! {
+                                                        <div class="pull-status">{status}</div>
+                                                    })}
+                                                }.into_any()
+                                            } else {
+                                                view! {
+                                                    <div class="model-option add-model-option"
+                                                         on:click=move |ev: web_sys::MouseEvent| {
+                                                             ev.stop_propagation();
+                                                             set_show_add_model.set(true);
+                                                         }>
+                                                        "+ Add Model"
+                                                    </div>
+                                                }.into_any()
+                                            }}
+                                        </div>
+
+                                        // Divider
+                                        <div class="model-divider"></div>
+
+                                        // Models list
+                                        <Suspense fallback=move || view! { <div class="loading-models">"Loading..."</div> }>
                                             {move || {
                                                 status_resource.get().map(|result| {
                                                     match result {
                                                         Ok(status) => {
-                                                            view! {
-                                                                <div id="ollama-models" class="model-submenu">
-                                                                    {status.models.into_iter().map(|model| {
-                                                                        let m_click = model.clone();
-                                                                        let m_touch = model.clone();
-                                                                        let m_display = model.clone();
-                                                                        view! {
-                                                                            <div class="model-option"
-                                                                                 on:click=move |ev: web_sys::MouseEvent| {
-                                                                                     ev.stop_propagation();
-                                                                                     select_model(m_click.clone());
-                                                                                 }
-                                                                                 on:touchend=move |ev: web_sys::TouchEvent| {
-                                                                                     ev.stop_propagation();
-                                                                                     select_model(m_touch.clone());
-                                                                                 }>
-                                                                                {m_display}
-                                                                            </div>
-                                                                        }
-                                                                    }).collect_view()}
-                                                                </div>
-                                                            }.into_any()
+                                                            if status.models.is_empty() {
+                                                                view! {
+                                                                    <div class="no-models">"No models installed"</div>
+                                                                }.into_any()
+                                                            } else {
+                                                                view! {
+                                                                    <div id="ollama-models" class="model-submenu">
+                                                                        {status.models.into_iter().map(|model| {
+                                                                            let m_click = model.clone();
+                                                                            let m_touch = model.clone();
+                                                                            let m_display = model.clone();
+                                                                            view! {
+                                                                                <div class="model-option"
+                                                                                     on:click=move |ev: web_sys::MouseEvent| {
+                                                                                         ev.stop_propagation();
+                                                                                         select_model(m_click.clone());
+                                                                                     }
+                                                                                     on:touchend=move |ev: web_sys::TouchEvent| {
+                                                                                         ev.stop_propagation();
+                                                                                         select_model(m_touch.clone());
+                                                                                     }>
+                                                                                    {m_display}
+                                                                                </div>
+                                                                            }
+                                                                        }).collect_view()}
+                                                                    </div>
+                                                                }.into_any()
+                                                            }
                                                         }
-                                                        Err(_) => view! { <div>"Error loading models"</div> }.into_any()
+                                                        Err(_) => view! { <div class="error-models">"Error loading models"</div> }.into_any()
                                                     }
                                                 })
                                             }}
