@@ -28,6 +28,9 @@ web-sys = { version = "0.3", features = [
     "Headers",
     "ReadableStream",
     "ReadableStreamDefaultReader",
+    "TouchEvent",
+    "MouseEvent",
+    "KeyboardEvent",
 ] }
 
 # Networking & Utilities

@@ -243,24 +243,44 @@ pub fn App() -> impl IntoView {
         }
     };
 
+    // Close all menus
+    let close_menus = move || {
+        set_menu_open.set(false);
+        set_models_panel_open.set(false);
+    };
+
     // Toggle menu
-    let toggle_menu = move |_| {
-        set_menu_open.update(|v| *v = !*v);
-        if !menu_open.get() {
-            set_models_panel_open.set(false);
+    let toggle_menu = move |ev: web_sys::MouseEvent| {
+        ev.stop_propagation();
+        if menu_open.get() {
+            close_menus();
+        } else {
+            set_menu_open.set(true);
         }
     };
 
     // Select model
     let select_model = move |model: String| {
         set_selected_model.set(Some(model));
-        set_menu_open.set(false);
-        set_models_panel_open.set(false);
+        close_menus();
+    };
+
+    // Handle runner item interaction (hover/click)
+    let open_models_panel = move |ev: web_sys::MouseEvent| {
+        ev.stop_propagation();
+        set_models_panel_open.set(true);
     };
 
     view! {
         <Stylesheet id="leptos" href="/pkg/ollama-rust.css"/>
         <Title text="Ollama Rust"/>
+
+        // Backdrop to close menus when clicking outside
+        <div class="menu-backdrop"
+             class:hidden=move || !menu_open.get()
+             on:click=move |_| close_menus()
+             on:touchend=move |_| close_menus()>
+        </div>
 
         <div class="chat-container">
             // Header
@@ -270,7 +290,13 @@ pub fn App() -> impl IntoView {
                         <button id="model-button" type="button" on:click=toggle_menu>
                             {move || {
                                 if let Some(model) = selected_model.get() {
-                                    format!("🧠 ollama: {}", model)
+                                    // Truncate long model names
+                                    let display = if model.len() > 15 {
+                                        format!("{}...", &model[..12])
+                                    } else {
+                                        model
+                                    };
+                                    format!("🧠 {}", display)
                                 } else {
                                     "🧠 Model".to_string()
                                 }
@@ -279,16 +305,22 @@ pub fn App() -> impl IntoView {
 
                         <div id="model-menu"
                              class="model-menu"
-                             class:hidden=move || !menu_open.get()>
+                             class:hidden=move || !menu_open.get()
+                             on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()>
                             <div class="runner-list">
                                 <div class="runner-item"
-                                     on:mouseenter=move |_| set_models_panel_open.set(true)
-                                     on:click=move |_| set_models_panel_open.update(|v| *v = !*v)>
+                                     on:mouseenter=open_models_panel
+                                     on:click=open_models_panel
+                                     on:touchstart=move |ev: web_sys::TouchEvent| {
+                                         ev.stop_propagation();
+                                         set_models_panel_open.set(true);
+                                     }>
                                     <div class="runner-name">"ollama"</div>
 
                                     <div id="models-panel"
                                          class="models-panel"
-                                         class:hidden=move || !models_panel_open.get()>
+                                         class:hidden=move || !models_panel_open.get()
+                                         on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()>
                                         <Suspense fallback=move || view! { <div>"Loading..."</div> }>
                                             {move || {
                                                 status_resource.get().map(|result| {
@@ -301,7 +333,14 @@ pub fn App() -> impl IntoView {
                                                                         let m2 = model.clone();
                                                                         view! {
                                                                             <div class="model-option"
-                                                                                 on:click=move |_| select_model(m.clone())>
+                                                                                 on:click=move |ev: web_sys::MouseEvent| {
+                                                                                     ev.stop_propagation();
+                                                                                     select_model(m.clone());
+                                                                                 }
+                                                                                 on:touchend=move |ev: web_sys::TouchEvent| {
+                                                                                     ev.stop_propagation();
+                                                                                     select_model(m.clone());
+                                                                                 }>
                                                                                 {m2}
                                                                             </div>
                                                                         }
