@@ -1,4 +1,5 @@
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use serde::{Deserialize, Serialize};
 
@@ -45,58 +46,95 @@ pub async fn get_hostname() -> Result<String, ServerFnError> {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PullResponse {
-    pub success: bool,
-    pub message: String,
+pub struct PullProgress {
+    pub model: String,
+    pub status: String,
+    pub percent: f32,
+    pub done: bool,
+    pub error: Option<String>,
 }
 
 #[server]
-pub async fn pull_model(model_name: String) -> Result<PullResponse, ServerFnError> {
+pub async fn start_model_pull(model_name: String) -> Result<PullProgress, ServerFnError> {
     use std::process::Command;
 
     if model_name.trim().is_empty() {
-        return Ok(PullResponse {
-            success: false,
-            message: "Model name cannot be empty".to_string(),
+        return Ok(PullProgress {
+            model: model_name,
+            status: "Error".to_string(),
+            percent: 0.0,
+            done: true,
+            error: Some("Model name cannot be empty".to_string()),
         });
     }
 
     // First ensure Ollama is running
     let status = get_ollama_status().await?;
     if !status.running {
-        // Start Ollama serve
-        let _ = Command::new("ollama")
-            .arg("serve")
-            .spawn();
-
-        // Wait for it to start
+        let _ = Command::new("ollama").arg("serve").spawn();
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
     }
 
-    // Run ollama pull
-    let output = Command::new("ollama")
-        .args(["pull", model_name.trim()])
-        .output();
+    // Start the pull in background using spawn
+    let model = model_name.trim().to_string();
+    tokio::spawn(async move {
+        let _ = Command::new("ollama")
+            .args(["pull", &model])
+            .output();
+    });
 
-    match output {
-        Ok(out) => {
-            if out.status.success() {
-                Ok(PullResponse {
-                    success: true,
-                    message: format!("Successfully pulled {}", model_name),
-                })
-            } else {
-                let stderr = String::from_utf8_lossy(&out.stderr);
-                Ok(PullResponse {
-                    success: false,
-                    message: format!("Failed to pull {}: {}", model_name, stderr),
-                })
-            }
+    Ok(PullProgress {
+        model: model_name.trim().to_string(),
+        status: "Starting...".to_string(),
+        percent: 0.0,
+        done: false,
+        error: None,
+    })
+}
+
+#[server]
+pub async fn check_pull_progress(model_name: String) -> Result<PullProgress, ServerFnError> {
+    // Check if model exists now (indicates pull completed)
+    let status = get_ollama_status().await?;
+
+    let model_exists = status.models.iter().any(|m| {
+        m.starts_with(model_name.trim()) || m.contains(&model_name)
+    });
+
+    if model_exists {
+        Ok(PullProgress {
+            model: model_name,
+            status: "Complete".to_string(),
+            percent: 100.0,
+            done: true,
+            error: None,
+        })
+    } else {
+        // Still downloading - check if ollama pull process is running
+        let output = std::process::Command::new("pgrep")
+            .args(["-f", &format!("ollama pull {}", model_name.trim())])
+            .output();
+
+        let is_running = output.map(|o| o.status.success()).unwrap_or(false);
+
+        if is_running {
+            Ok(PullProgress {
+                model: model_name,
+                status: "Downloading...".to_string(),
+                percent: 50.0, // We can't get exact progress easily
+                done: false,
+                error: None,
+            })
+        } else {
+            // Process not running and model not found - might have failed or not started yet
+            Ok(PullProgress {
+                model: model_name,
+                status: "Checking...".to_string(),
+                percent: 25.0,
+                done: false,
+                error: None,
+            })
         }
-        Err(e) => Ok(PullResponse {
-            success: false,
-            message: format!("Error running ollama pull: {}", e),
-        }),
     }
 }
 
@@ -189,7 +227,7 @@ pub fn App() -> impl IntoView {
     let (toggle_pending, set_toggle_pending) = signal(false);
     let (show_add_model, set_show_add_model) = signal(false);
     let (new_model_name, set_new_model_name) = signal(String::new());
-    let (pull_status, set_pull_status) = signal::<Option<String>>(None);
+    let (active_downloads, set_active_downloads) = signal::<Vec<PullProgress>>(vec![]);
 
     // Resources
     let status_resource = Resource::new(|| (), |_| get_ollama_status());
@@ -200,35 +238,92 @@ pub fn App() -> impl IntoView {
         toggle_ollama_service().await
     });
 
-    // Pull model action
-    let pull_action = Action::new(move |model: &String| {
-        let model = model.clone();
-        async move {
-            pull_model(model).await
+    // Start download action
+    let start_download = move |model_name: String| {
+        if model_name.trim().is_empty() {
+            return;
         }
-    });
 
-    // Handle pull completion
-    Effect::new(move |_| {
-        if let Some(result) = pull_action.value().get() {
-            match result {
-                Ok(response) => {
-                    set_pull_status.set(Some(response.message.clone()));
-                    if response.success {
-                        // Refresh models list
-                        status_resource.refetch();
-                        set_new_model_name.set(String::new());
-                        set_show_add_model.set(false);
-                        // Also update running state
-                        set_ollama_running.set(true);
-                    }
-                }
-                Err(e) => {
-                    set_pull_status.set(Some(format!("Error: {}", e)));
-                }
-            }
+        // Check if already downloading
+        let downloads = active_downloads.get();
+        if downloads.iter().any(|d| d.model == model_name.trim() && !d.done) {
+            return;
         }
-    });
+
+        // Add to active downloads
+        set_active_downloads.update(|downloads| {
+            downloads.push(PullProgress {
+                model: model_name.trim().to_string(),
+                status: "Starting...".to_string(),
+                percent: 0.0,
+                done: false,
+                error: None,
+            });
+        });
+
+        // Start the pull
+        let model = model_name.trim().to_string();
+        spawn_local(async move {
+            let _ = start_model_pull(model).await;
+        });
+
+        // Clear input
+        set_new_model_name.set(String::new());
+        set_show_add_model.set(false);
+    };
+
+    // Poll for download progress
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::prelude::*;
+
+        let check_progress = move || {
+            let downloads = active_downloads.get();
+            let pending: Vec<_> = downloads.iter()
+                .filter(|d| !d.done)
+                .map(|d| d.model.clone())
+                .collect();
+
+            for model in pending {
+                let model_clone = model.clone();
+                spawn_local(async move {
+                    if let Ok(progress) = check_pull_progress(model_clone.clone()).await {
+                        set_active_downloads.update(|downloads| {
+                            if let Some(d) = downloads.iter_mut().find(|d| d.model == model_clone) {
+                                d.status = progress.status;
+                                d.percent = progress.percent;
+                                d.done = progress.done;
+                                d.error = progress.error;
+                            }
+                        });
+
+                        // Refresh models list when complete
+                        if progress.done && progress.error.is_none() {
+                            status_resource.refetch();
+                        }
+                    }
+                });
+            }
+        };
+
+        // Set up interval to check progress
+        Effect::new(move |_| {
+            let downloads = active_downloads.get();
+            if downloads.iter().any(|d| !d.done) {
+                let cb = Closure::wrap(Box::new(move || {
+                    check_progress();
+                }) as Box<dyn Fn()>);
+
+                if let Some(window) = web_sys::window() {
+                    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                        cb.as_ref().unchecked_ref(),
+                        2000, // Check every 2 seconds
+                    );
+                }
+                cb.forget();
+            }
+        });
+    }
 
     // Update running state when status loads
     Effect::new(move |_| {
@@ -443,6 +538,15 @@ pub fn App() -> impl IntoView {
                                          on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()>
                                         // Add Model section
                                         <div class="add-model-section">
+                                            // Library link
+                                            <a href="https://ollama.com/library"
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               class="model-option library-link"
+                                               on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()>
+                                                "📚 Browse Models"
+                                            </a>
+
                                             {move || if show_add_model.get() {
                                                 view! {
                                                     <div class="add-model-input-row">
@@ -457,10 +561,7 @@ pub fn App() -> impl IntoView {
                                                                 ev.stop_propagation();
                                                                 if ev.key() == "Enter" {
                                                                     let name = new_model_name.get();
-                                                                    if !name.trim().is_empty() {
-                                                                        set_pull_status.set(Some(format!("Pulling {}...", name)));
-                                                                        pull_action.dispatch(name);
-                                                                    }
+                                                                    start_download(name);
                                                                 }
                                                             }
                                                         />
@@ -469,14 +570,10 @@ pub fn App() -> impl IntoView {
                                                             on:click=move |ev: web_sys::MouseEvent| {
                                                                 ev.stop_propagation();
                                                                 let name = new_model_name.get();
-                                                                if !name.trim().is_empty() {
-                                                                    set_pull_status.set(Some(format!("Pulling {}...", name)));
-                                                                    pull_action.dispatch(name);
-                                                                }
+                                                                start_download(name);
                                                             }
-                                                            disabled=move || pull_action.pending().get()
                                                         >
-                                                            {move || if pull_action.pending().get() { "..." } else { "Pull" }}
+                                                            "Pull"
                                                         </button>
                                                         <button
                                                             class="add-model-btn cancel-btn"
@@ -484,15 +581,11 @@ pub fn App() -> impl IntoView {
                                                                 ev.stop_propagation();
                                                                 set_show_add_model.set(false);
                                                                 set_new_model_name.set(String::new());
-                                                                set_pull_status.set(None);
                                                             }
                                                         >
                                                             "✕"
                                                         </button>
                                                     </div>
-                                                    {move || pull_status.get().map(|status| view! {
-                                                        <div class="pull-status">{status}</div>
-                                                    })}
                                                 }.into_any()
                                             } else {
                                                 view! {
@@ -580,6 +673,39 @@ pub fn App() -> impl IntoView {
                         <span class="slider"></span>
                     </label>
                 </div>
+            </div>
+
+            // Download progress bars
+            <div class="download-progress-container">
+                <For
+                    each=move || active_downloads.get().into_iter().filter(|d| !d.done || d.error.is_some()).collect::<Vec<_>>()
+                    key=|d| d.model.clone()
+                    children=move |download| {
+                        let model_name = download.model.clone();
+                        let model_for_remove = download.model.clone();
+                        view! {
+                            <div class="download-progress-bar">
+                                <div class="download-info">
+                                    <span class="download-model">{model_name}</span>
+                                    <span class="download-status">{download.status.clone()}</span>
+                                    <button class="download-dismiss"
+                                            on:click=move |_| {
+                                                set_active_downloads.update(|downloads| {
+                                                    downloads.retain(|d| d.model != model_for_remove);
+                                                });
+                                            }>
+                                        "✕"
+                                    </button>
+                                </div>
+                                <div class="progress-track">
+                                    <div class="progress-fill"
+                                         style:width=move || format!("{}%", download.percent)>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                />
             </div>
 
             // Chat window
