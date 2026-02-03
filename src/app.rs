@@ -393,24 +393,25 @@ fn get_cloud_credentials_store() -> &'static Mutex<Option<(String, String)>> {
 }
 
 #[server]
-pub async fn cloud_login(email: String, password: String) -> Result<CloudLoginResponse, ServerFnError> {
-    // Validate input
-    if email.trim().is_empty() || password.trim().is_empty() {
+pub async fn cloud_oauth_login(provider: String) -> Result<CloudLoginResponse, ServerFnError> {
+    // Validate provider
+    if provider != "google" && provider != "github" {
         return Ok(CloudLoginResponse {
             success: false,
-            message: "Email and password are required".to_string(),
+            message: "Invalid OAuth provider".to_string(),
             api_key: None,
         });
     }
 
-    // TODO: Replace with actual Ollama Cloud API authentication
-    // For now, simulate a login request
+    // TODO: Replace with actual Ollama Cloud OAuth flow
+    // In production, this would:
+    // 1. Redirect to OAuth provider
+    // 2. Handle callback with authorization code
+    // 3. Exchange code for tokens
+    // 4. Get user info from provider
+
     let client = reqwest::Client::new();
-    let res = client.post("https://api.ollama.com/v1/auth/login")
-        .json(&serde_json::json!({
-            "email": email.trim(),
-            "password": password
-        }))
+    let res = client.post(&format!("https://api.ollama.com/v1/auth/oauth/{}", provider))
         .send()
         .await;
 
@@ -422,46 +423,47 @@ pub async fn cloud_login(email: String, password: String) -> Result<CloudLoginRe
             if is_success {
                 if let Ok(json) = json_result {
                     let api_key = json["api_key"].as_str().map(|s| s.to_string());
+                    let user_email = json["email"].as_str()
+                        .or_else(|| json["login"].as_str())
+                        .map(|s| s.to_string());
 
                     // Store credentials
                     if let Some(ref key) = api_key {
                         let store = get_cloud_credentials_store();
                         let mut creds = store.lock().unwrap();
-                        *creds = Some((email.trim().to_string(), key.clone()));
+                        *creds = Some((user_email.clone().unwrap_or_default(), key.clone()));
                     }
 
                     return Ok(CloudLoginResponse {
                         success: true,
                         message: "Login successful".to_string(),
-                        api_key,
+                        api_key: user_email, // Return user identifier in api_key field
                     });
                 }
             }
 
-            // Handle error response
-            let error_msg = if let Ok(json) = json_result {
-                json["error"].as_str().unwrap_or("Login failed").to_string()
-            } else {
-                "Login failed".to_string()
-            };
-
             Ok(CloudLoginResponse {
                 success: false,
-                message: error_msg,
+                message: "OAuth login failed".to_string(),
                 api_key: None,
             })
         }
         Err(_) => {
-            // For demo purposes, accept any login when cloud is unreachable
-            // In production, this should return an error
+            // For demo purposes, simulate successful OAuth when cloud is unreachable
+            let demo_user = match provider.as_str() {
+                "google" => "user@gmail.com",
+                "github" => "github_user",
+                _ => "demo_user",
+            };
+
             let store = get_cloud_credentials_store();
             let mut creds = store.lock().unwrap();
-            *creds = Some((email.trim().to_string(), "demo_key".to_string()));
+            *creds = Some((demo_user.to_string(), "demo_key".to_string()));
 
             Ok(CloudLoginResponse {
                 success: true,
                 message: "Connected (demo mode)".to_string(),
-                api_key: Some("demo_key".to_string()),
+                api_key: Some(demo_user.to_string()),
             })
         }
     }
@@ -597,8 +599,6 @@ pub fn App() -> impl IntoView {
     // Cloud state
     let (cloud_panel_open, set_cloud_panel_open) = signal(false);
     let (cloud_logged_in, set_cloud_logged_in) = signal(false);
-    let (cloud_email, set_cloud_email) = signal(String::new());
-    let (cloud_password, set_cloud_password) = signal(String::new());
     let (cloud_login_pending, set_cloud_login_pending) = signal(false);
     let (cloud_login_error, set_cloud_login_error) = signal::<Option<String>>(None);
     let (cloud_user_email, set_cloud_user_email) = signal::<Option<String>>(None);
@@ -838,27 +838,17 @@ pub fn App() -> impl IntoView {
         }
     });
 
-    // Cloud login handler
-    let do_cloud_login = move || {
-        let email = cloud_email.get();
-        let password = cloud_password.get();
-
-        if email.trim().is_empty() || password.trim().is_empty() {
-            set_cloud_login_error.set(Some("Please enter email and password".to_string()));
-            return;
-        }
-
+    // OAuth login handler
+    let do_oauth_login = move |provider: String| {
         set_cloud_login_pending.set(true);
         set_cloud_login_error.set(None);
 
         spawn_local(async move {
-            match cloud_login(email.clone(), password).await {
+            match cloud_oauth_login(provider.clone()).await {
                 Ok(response) => {
                     if response.success {
                         set_cloud_logged_in.set(true);
-                        set_cloud_user_email.set(Some(email));
-                        set_cloud_email.set(String::new());
-                        set_cloud_password.set(String::new());
+                        set_cloud_user_email.set(response.api_key); // Use api_key field for user identifier
                         cloud_models_resource.refetch();
                     } else {
                         set_cloud_login_error.set(Some(response.message));
@@ -1314,7 +1304,7 @@ pub fn App() -> impl IntoView {
                                                 </Suspense>
                                             }.into_any()
                                         } else {
-                                            // Not logged in - show login form
+                                            // Not logged in - show OAuth login buttons
                                             view! {
                                                 <div class="cloud-login-section">
                                                     <div class="cloud-login-header">"Sign in to Ollama Cloud"</div>
@@ -1325,57 +1315,34 @@ pub fn App() -> impl IntoView {
                                                         }
                                                     })}
 
-                                                    <input
-                                                        type="email"
-                                                        class="cloud-login-input"
-                                                        placeholder="Email"
-                                                        prop:value=move || cloud_email.get()
-                                                        on:input=move |ev| set_cloud_email.set(event_target_value(&ev))
-                                                        on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()
-                                                        on:keydown=move |ev: web_sys::KeyboardEvent| {
-                                                            ev.stop_propagation();
-                                                            if ev.key() == "Enter" {
-                                                                do_cloud_login();
-                                                            }
-                                                        }
-                                                    />
-
-                                                    <input
-                                                        type="password"
-                                                        class="cloud-login-input"
-                                                        placeholder="Password"
-                                                        prop:value=move || cloud_password.get()
-                                                        on:input=move |ev| set_cloud_password.set(event_target_value(&ev))
-                                                        on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()
-                                                        on:keydown=move |ev: web_sys::KeyboardEvent| {
-                                                            ev.stop_propagation();
-                                                            if ev.key() == "Enter" {
-                                                                do_cloud_login();
-                                                            }
-                                                        }
-                                                    />
-
                                                     <button
-                                                        class="cloud-login-btn"
+                                                        class="oauth-btn google-btn"
                                                         disabled=move || cloud_login_pending.get()
                                                         on:click=move |ev: web_sys::MouseEvent| {
                                                             ev.stop_propagation();
-                                                            do_cloud_login();
+                                                            do_oauth_login("google".to_string());
                                                         }>
-                                                        {move || if cloud_login_pending.get() {
-                                                            "Signing in..."
-                                                        } else {
-                                                            "Sign In"
-                                                        }}
+                                                        <svg class="oauth-icon" viewBox="0 0 24 24">
+                                                            <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                                            <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                                            <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                                                            <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                                                        </svg>
+                                                        "Continue with Google"
                                                     </button>
 
-                                                    <a href="https://ollama.com/signup"
-                                                       target="_blank"
-                                                       rel="noopener noreferrer"
-                                                       class="cloud-signup-link"
-                                                       on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()>
-                                                        "Create an account"
-                                                    </a>
+                                                    <button
+                                                        class="oauth-btn github-btn"
+                                                        disabled=move || cloud_login_pending.get()
+                                                        on:click=move |ev: web_sys::MouseEvent| {
+                                                            ev.stop_propagation();
+                                                            do_oauth_login("github".to_string());
+                                                        }>
+                                                        <svg class="oauth-icon" viewBox="0 0 24 24">
+                                                            <path fill="currentColor" d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                                                        </svg>
+                                                        "Continue with GitHub"
+                                                    </button>
                                                 </div>
                                             }.into_any()
                                         }}
