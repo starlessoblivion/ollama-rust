@@ -495,6 +495,99 @@ body {
     margin: 0.5rem 0;
 }
 
+/* Brave Search submenu */
+.brave-search-item {
+    position: relative;
+}
+
+.brave-submenu {
+    position: absolute;
+    top: 0;
+    right: calc(100% + 8px);
+    z-index: 1001;
+}
+
+.brave-submenu.hidden {
+    display: none;
+}
+
+.brave-submenu-content {
+    background: var(--bg-menu);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.75rem;
+    min-width: 220px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+.brave-submenu-header {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.brave-token-row {
+    margin-bottom: 0.75rem;
+}
+
+.brave-token-input {
+    width: 100%;
+    padding: 0.5rem 0.6rem;
+    font-size: 0.85rem;
+    border: 1px solid var(--border-input);
+    border-radius: 6px;
+    font-family: inherit;
+    background: var(--bg-input);
+    color: var(--text-primary);
+}
+
+.brave-token-input:focus {
+    outline: 2px solid var(--accent);
+    border-color: var(--accent);
+}
+
+.brave-token-input::placeholder {
+    color: var(--text-muted);
+}
+
+.brave-api-link {
+    display: block;
+    padding: 0.5rem 0.6rem;
+    text-decoration: none;
+    color: #fb542b;
+    font-weight: 500;
+    font-size: 0.85rem;
+    border-radius: 6px;
+    text-align: center;
+    background: rgba(251, 84, 43, 0.1);
+    transition: background-color 0.15s;
+}
+
+.brave-api-link:hover {
+    background: rgba(251, 84, 43, 0.2);
+}
+
+/* Mobile adjustments for brave submenu */
+@media (max-width: 480px) {
+    .brave-submenu {
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 1002;
+    }
+
+    .brave-submenu-content {
+        border-radius: 16px 16px 0 0;
+        padding: 1rem;
+        min-width: 100%;
+    }
+}
+
 /* Theme selector */
 .theme-section {
     padding: 0.25rem;

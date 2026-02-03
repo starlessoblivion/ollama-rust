@@ -574,6 +574,11 @@ pub fn App() -> impl IntoView {
     let (status_dropdown_open, set_status_dropdown_open) = signal(false);
     let (current_theme, set_current_theme) = signal(String::from("light"));
 
+    // Brave Search state
+    let (brave_search_enabled, set_brave_search_enabled) = signal(false);
+    let (brave_api_token, set_brave_api_token) = signal(String::new());
+    let (brave_submenu_open, set_brave_submenu_open) = signal(false);
+
     // Cloud state
     let (cloud_panel_open, set_cloud_panel_open) = signal(false);
     let (cloud_logged_in, set_cloud_logged_in) = signal(false);
@@ -586,13 +591,14 @@ pub fn App() -> impl IntoView {
     let (show_add_cloud_model, set_show_add_cloud_model) = signal(false);
     let (new_cloud_model_name, set_new_cloud_model_name) = signal(String::new());
 
-    // Load theme from localStorage on mount
+    // Load theme and Brave Search settings from localStorage on mount
     #[cfg(target_arch = "wasm32")]
     {
         use wasm_bindgen::JsCast;
         Effect::new(move |_| {
             if let Some(window) = web_sys::window() {
                 if let Ok(Some(storage)) = window.local_storage() {
+                    // Load theme
                     if let Ok(Some(saved_theme)) = storage.get_item("theme") {
                         set_current_theme.set(saved_theme.clone());
                         if let Some(document) = window.document() {
@@ -600,6 +606,13 @@ pub fn App() -> impl IntoView {
                                 let _ = body.set_attribute("data-theme", &saved_theme);
                             }
                         }
+                    }
+                    // Load Brave Search settings
+                    if let Ok(Some(enabled)) = storage.get_item("brave_search_enabled") {
+                        set_brave_search_enabled.set(enabled == "true");
+                    }
+                    if let Ok(Some(token)) = storage.get_item("brave_api_token") {
+                        set_brave_api_token.set(token);
                     }
                 }
             }
@@ -1566,6 +1579,68 @@ pub fn App() -> impl IntoView {
                                            } />
                                     <span class="slider"></span>
                                 </label>
+                            </div>
+
+                            // Brave Search toggle with hover submenu
+                            <div class="status-menu-item brave-search-item"
+                                 on:mouseenter=move |_| set_brave_submenu_open.set(true)
+                                 on:mouseleave=move |_| set_brave_submenu_open.set(false)>
+                                <span class="status-label">"Web Search"</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox"
+                                           id="brave-toggle"
+                                           prop:checked=move || brave_search_enabled.get()
+                                           on:change=move |_| {
+                                               let new_val = !brave_search_enabled.get();
+                                               set_brave_search_enabled.set(new_val);
+                                               #[cfg(target_arch = "wasm32")]
+                                               {
+                                                   if let Some(window) = web_sys::window() {
+                                                       if let Ok(Some(storage)) = window.local_storage() {
+                                                           let _ = storage.set_item("brave_search_enabled", if new_val { "true" } else { "false" });
+                                                       }
+                                                   }
+                                               }
+                                           } />
+                                    <span class="slider"></span>
+                                </label>
+
+                                // Brave Search submenu (appears on hover)
+                                <div class="brave-submenu"
+                                     class:hidden=move || !brave_submenu_open.get()
+                                     on:mouseenter=move |_| set_brave_submenu_open.set(true)
+                                     on:mouseleave=move |_| set_brave_submenu_open.set(false)>
+                                    <div class="brave-submenu-content">
+                                        <div class="brave-submenu-header">"Brave Search API"</div>
+                                        <div class="brave-token-row">
+                                            <input
+                                                type="password"
+                                                class="brave-token-input"
+                                                placeholder="Enter API Token"
+                                                prop:value=move || brave_api_token.get()
+                                                on:input=move |ev| {
+                                                    let token = event_target_value(&ev);
+                                                    set_brave_api_token.set(token.clone());
+                                                    #[cfg(target_arch = "wasm32")]
+                                                    {
+                                                        if let Some(window) = web_sys::window() {
+                                                            if let Ok(Some(storage)) = window.local_storage() {
+                                                                let _ = storage.set_item("brave_api_token", &token);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()
+                                            />
+                                        </div>
+                                        <a href="https://brave.com/search/api/"
+                                           target="_blank"
+                                           rel="noopener noreferrer"
+                                           class="brave-api-link">
+                                            "Get API Key →"
+                                        </a>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="status-divider"></div>
