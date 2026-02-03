@@ -46,16 +46,9 @@ install_dependencies() {
     print_status "Installing dependencies..."
 
     if [ "$IS_TERMUX" = true ]; then
-        # Termux - install base deps only (rust via rustup later)
+        # Termux - install base deps
         pkg update -y
         pkg install -y git openssl pkg-config binutils
-
-        # Check if pkg rust is installed (it doesn't have rustup)
-        if command -v rustc &> /dev/null && ! command -v rustup &> /dev/null; then
-            print_warning "Detected pkg rust (no rustup support)"
-            print_status "Removing pkg rust to install rustup version..."
-            pkg uninstall -y rust
-        fi
     elif command -v apt-get &> /dev/null; then
         # Debian/Ubuntu
         sudo apt-get update
@@ -67,13 +60,13 @@ install_dependencies() {
         # Fedora
         sudo dnf install -y git curl gcc openssl-devel pkg-config
     else
-        print_warning "Unknown package manager. Please install manually: git, rust, openssl, pkg-config"
+        print_warning "Unknown package manager. Please install manually: git, openssl, pkg-config"
     fi
 
     print_success "Dependencies installed"
 }
 
-# Install Rust via rustup
+# Check and setup Rust
 install_rust() {
     # Source cargo env first if it exists
     if [ -f "$HOME/.cargo/env" ]; then
@@ -82,21 +75,41 @@ install_rust() {
 
     # Check if rustup is available
     if command -v rustup &> /dev/null; then
-        print_success "Rustup already installed: $(rustc --version)"
-        return
+        print_success "Using existing rustup: $(rustc --version)"
+        return 0
     fi
 
-    # Check if rustc exists without rustup (pkg install rust)
+    # Check if rustc exists without rustup
     if command -v rustc &> /dev/null; then
-        print_warning "Found rustc but no rustup - WASM target cannot be added"
-        print_warning "Please uninstall pkg rust and re-run:"
-        print_warning "  pkg uninstall rust"
-        print_warning "  Then re-run this installer"
-        exit 1
+        print_warning "Found rustc $(rustc --version) but no rustup"
+        print_warning "rustup is required to add the WASM target"
+        echo ""
+        print_status "Options:"
+        echo "  1. Install rustup alongside (recommended):"
+        echo "     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+        echo ""
+        echo "  2. On Termux, replace pkg rust with rustup:"
+        echo "     pkg uninstall rust"
+        echo "     Then re-run this installer"
+        echo ""
+        print_status "Would you like to install rustup now? [y/N] "
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            print_status "Installing rustup..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+            if [ -f "$HOME/.cargo/env" ]; then
+                source "$HOME/.cargo/env"
+            fi
+            print_success "Rustup installed"
+            return 0
+        else
+            print_error "rustup is required. Please install it and re-run."
+            exit 1
+        fi
     fi
 
-    # Install rustup
-    print_status "Installing Rust via rustup..."
+    # Neither rustup nor rustc found - install rustup
+    print_status "No Rust installation found. Installing via rustup..."
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 
     # Source cargo env
