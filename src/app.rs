@@ -425,15 +425,23 @@ pub fn App() -> impl IntoView {
                     children=move |msg| {
                         let is_user = msg.role == "user";
                         let is_empty_ai = msg.role == "ai" && msg.text.is_empty();
+                        let msg_text = msg.text.clone();
 
                         view! {
                             <div class="chat-bubble"
                                  class:user-bubble=is_user
                                  class:ai-bubble=!is_user>
                                 {if is_empty_ai {
+                                    // Thinking animation
                                     view! {
                                         <span class="thinking">
-                                            <span class="brain">"🧠"</span>
+                                            <span class="msg-prefix">
+                                                <Suspense fallback=move || view! { "[...]" }>
+                                                    {move || hostname_resource.get().map(|h| {
+                                                        format!("[{}]", h.unwrap_or_else(|_| "ollama".to_string()))
+                                                    })}
+                                                </Suspense>
+                                            </span>
                                             <span class="thinking-dots">
                                                 <span class="thinking-dot"></span>
                                                 <span class="thinking-dot"></span>
@@ -441,8 +449,23 @@ pub fn App() -> impl IntoView {
                                             </span>
                                         </span>
                                     }.into_any()
+                                } else if is_user {
+                                    // User message - just show text
+                                    view! { <span>{msg_text}</span> }.into_any()
                                 } else {
-                                    view! { <span>{msg.text.clone()}</span> }.into_any()
+                                    // AI message with hostname prefix
+                                    view! {
+                                        <span>
+                                            <span class="msg-prefix">
+                                                <Suspense fallback=move || view! { "[...]:" }>
+                                                    {move || hostname_resource.get().map(|h| {
+                                                        format!("[{}]: ", h.unwrap_or_else(|_| "ollama".to_string()))
+                                                    })}
+                                                </Suspense>
+                                            </span>
+                                            {msg_text.clone()}
+                                        </span>
+                                    }.into_any()
                                 }}
                             </div>
                         }

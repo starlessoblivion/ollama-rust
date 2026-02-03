@@ -311,6 +311,13 @@ body {
     background-color: #f0f0f0;
 }
 
+/* Message prefix */
+.msg-prefix {
+    font-weight: 700;
+    color: #001f3f;
+    margin-right: 0.25rem;
+}
+
 /* Thinking animation */
 .thinking {
     display: inline-flex;
@@ -318,11 +325,6 @@ body {
     gap: 8px;
     font-weight: 600;
     color: #222;
-}
-
-.thinking .brain {
-    font-size: 1.2rem;
-    display: inline-block;
 }
 
 .thinking-dots {
