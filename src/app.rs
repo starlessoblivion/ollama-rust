@@ -91,7 +91,7 @@ pub fn App() -> impl IntoView {
     });
 
     // Send message handler
-    let send_message = move |_| {
+    let do_send = move || {
         let text = input.get();
         if text.trim().is_empty() || selected_model.get().is_none() || is_streaming.get() {
             return;
@@ -124,12 +124,10 @@ pub fn App() -> impl IntoView {
         {
             use wasm_bindgen::prelude::*;
             use wasm_bindgen::JsCast;
-            use web_sys::{EventSource, MessageEvent};
 
             // Use fetch with SSE
             wasm_bindgen_futures::spawn_local(async move {
                 let window = web_sys::window().unwrap();
-                let document = window.document().unwrap();
 
                 let opts = web_sys::RequestInit::new();
                 opts.set_method("POST");
@@ -148,48 +146,49 @@ pub fn App() -> impl IntoView {
 
                 if let Ok(resp) = resp_value {
                     let resp: web_sys::Response = resp.dyn_into().unwrap();
-                    let body = resp.body().unwrap();
-                    let reader = body.get_reader();
+                    if let Some(body) = resp.body() {
+                        let reader: web_sys::ReadableStreamDefaultReader = body.get_reader().unchecked_into();
 
-                    let mut full_text = String::new();
+                        let mut full_text = String::new();
 
-                    loop {
-                        let result = wasm_bindgen_futures::JsFuture::from(reader.read()).await;
-                        if let Ok(chunk) = result {
-                            let chunk: js_sys::Object = chunk.dyn_into().unwrap();
-                            let done = js_sys::Reflect::get(&chunk, &JsValue::from_str("done")).unwrap();
+                        loop {
+                            let read_promise = reader.read();
+                            let result = wasm_bindgen_futures::JsFuture::from(read_promise).await;
+                            if let Ok(chunk) = result {
+                                let done = js_sys::Reflect::get(&chunk, &JsValue::from_str("done")).unwrap();
 
-                            if done.as_bool().unwrap_or(true) {
+                                if done.as_bool().unwrap_or(true) {
+                                    break;
+                                }
+
+                                let value = js_sys::Reflect::get(&chunk, &JsValue::from_str("value")).unwrap();
+                                let array: js_sys::Uint8Array = value.dyn_into().unwrap();
+                                let bytes = array.to_vec();
+                                let text = String::from_utf8_lossy(&bytes);
+
+                                // Parse SSE format
+                                for line in text.lines() {
+                                    if line.starts_with("data:") {
+                                        let data = line.trim_start_matches("data:");
+                                        if data == "__END__" {
+                                            set_is_streaming.set(false);
+                                            break;
+                                        }
+                                        full_text.push_str(data);
+
+                                        let current_text = full_text.clone();
+                                        set_messages.update(|msgs| {
+                                            if let Some(last) = msgs.last_mut() {
+                                                if last.role == "ai" {
+                                                    last.text = current_text;
+                                                }
+                                            }
+                                        });
+                                    }
+                                }
+                            } else {
                                 break;
                             }
-
-                            let value = js_sys::Reflect::get(&chunk, &JsValue::from_str("value")).unwrap();
-                            let array: js_sys::Uint8Array = value.dyn_into().unwrap();
-                            let bytes = array.to_vec();
-                            let text = String::from_utf8_lossy(&bytes);
-
-                            // Parse SSE format
-                            for line in text.lines() {
-                                if line.starts_with("data:") {
-                                    let data = line.trim_start_matches("data:");
-                                    if data == "__END__" {
-                                        set_is_streaming.set(false);
-                                        break;
-                                    }
-                                    full_text.push_str(data);
-
-                                    let current_text = full_text.clone();
-                                    set_messages.update(|msgs| {
-                                        if let Some(last) = msgs.last_mut() {
-                                            if last.role == "ai" {
-                                                last.text = current_text;
-                                            }
-                                        }
-                                    });
-                                }
-                            }
-                        } else {
-                            break;
                         }
                     }
                 }
@@ -339,17 +338,17 @@ pub fn App() -> impl IntoView {
                     rows="1"
                     prop:value=move || input.get()
                     on:input=move |ev| set_input.set(event_target_value(&ev))
-                    on:keydown=move |ev| {
+                    on:keydown=move |ev: web_sys::KeyboardEvent| {
                         if ev.key() == "Enter" && !ev.shift_key() && !ev.alt_key() {
                             ev.prevent_default();
-                            send_message(());
+                            do_send();
                         }
                     }
                     disabled=move || is_streaming.get()
                 ></textarea>
                 <button id="send-button"
                         type="button"
-                        on:click=send_message
+                        on:click=move |_: web_sys::MouseEvent| do_send()
                         disabled=move || is_streaming.get()>
                     "➤"
                 </button>
