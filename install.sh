@@ -46,9 +46,9 @@ install_dependencies() {
     print_status "Installing dependencies..."
 
     if [ "$IS_TERMUX" = true ]; then
-        # Termux
+        # Termux - install base deps, rust via rustup later
         pkg update -y
-        pkg install -y git rust openssl pkg-config
+        pkg install -y git openssl pkg-config binutils
     elif command -v apt-get &> /dev/null; then
         # Debian/Ubuntu
         sudo apt-get update
@@ -66,15 +66,25 @@ install_dependencies() {
     print_success "Dependencies installed"
 }
 
-# Install Rust if not present (non-Termux)
+# Install Rust via rustup
 install_rust() {
-    if ! command -v rustc &> /dev/null; then
-        print_status "Installing Rust..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        source "$HOME/.cargo/env"
-        print_success "Rust installed"
+    if ! command -v rustup &> /dev/null; then
+        print_status "Installing Rust via rustup..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+
+        # Source cargo env
+        if [ -f "$HOME/.cargo/env" ]; then
+            source "$HOME/.cargo/env"
+        fi
+
+        print_success "Rust installed via rustup"
     else
-        print_success "Rust already installed: $(rustc --version)"
+        print_success "Rustup already installed: $(rustc --version)"
+    fi
+
+    # Ensure cargo env is sourced
+    if [ -f "$HOME/.cargo/env" ]; then
+        source "$HOME/.cargo/env"
     fi
 }
 
@@ -217,10 +227,7 @@ EOF
 # Main installation
 main() {
     install_dependencies
-
-    if [ "$IS_TERMUX" = false ]; then
-        install_rust
-    fi
+    install_rust
 
     # Source cargo env
     if [ -f "$HOME/.cargo/env" ]; then
