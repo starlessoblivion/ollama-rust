@@ -798,6 +798,7 @@ pub fn App() -> impl IntoView {
                         let model_name = dl.model.clone();
                         let model_for_remove = dl.model.clone();
                         let status = dl.status.clone();
+                        let status_for_check = status.clone();
                         let percent = dl.percent;
                         let speed = dl.speed.clone();
 
@@ -808,8 +809,8 @@ pub fn App() -> impl IntoView {
                                     <span class="download-status">{status}</span>
                                     {if !speed.is_empty() {
                                         view! { <span class="download-speed">{speed}</span> }.into_any()
-                                    } else if status == "Downloading..." {
-                                        view! { <span class="download-speed spinning">⟳</span> }.into_any()
+                                    } else if status_for_check == "Downloading..." {
+                                        view! { <span class="download-speed spinning">↓</span> }.into_any()
                                     } else {
                                         view! { <></> }.into_any()
                                     }}
