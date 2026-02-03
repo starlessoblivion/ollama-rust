@@ -288,6 +288,8 @@ pub fn App() -> impl IntoView {
                 let model_clone = model.clone();
                 spawn_local(async move {
                     if let Ok(progress) = check_pull_progress(model_clone.clone()).await {
+                        let is_complete = progress.done && progress.error.is_none();
+
                         set_active_downloads.update(|downloads| {
                             if let Some(d) = downloads.iter_mut().find(|d| d.model == model_clone) {
                                 d.status = progress.status;
@@ -298,7 +300,7 @@ pub fn App() -> impl IntoView {
                         });
 
                         // Refresh models list when complete
-                        if progress.done && progress.error.is_none() {
+                        if is_complete {
                             status_resource.refetch();
                         }
                     }
