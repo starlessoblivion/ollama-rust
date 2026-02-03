@@ -666,8 +666,9 @@ pub fn App() -> impl IntoView {
                                                                             let m_touch = model.clone();
                                                                             let m_display = model.clone();
                                                                             let m_delete = model.clone();
+                                                                            let m_delete_for_closure = m_delete.clone();
                                                                             let is_deleting = move || {
-                                                                                deleting_model.get().as_ref() == Some(&m_delete)
+                                                                                deleting_model.get().as_ref() == Some(&m_delete_for_closure)
                                                                             };
                                                                             view! {
                                                                                 <div class="model-option-row">
