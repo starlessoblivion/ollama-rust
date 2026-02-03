@@ -881,6 +881,28 @@ pub fn App() -> impl IntoView {
         });
     };
 
+    // Auto-scroll chat window when messages change
+    #[cfg(target_arch = "wasm32")]
+    Effect::new(move |_| {
+        let _ = messages.get(); // Subscribe to messages changes
+        // Use requestAnimationFrame to ensure DOM is updated before scrolling
+        if let Some(window) = web_sys::window() {
+            use wasm_bindgen::prelude::*;
+            use wasm_bindgen::JsCast;
+            let cb = Closure::once(Box::new(move || {
+                if let Some(window) = web_sys::window() {
+                    if let Some(document) = window.document() {
+                        if let Some(chat_window) = document.get_element_by_id("chat-window") {
+                            chat_window.set_scroll_top(chat_window.scroll_height());
+                        }
+                    }
+                }
+            }) as Box<dyn FnOnce()>);
+            let _ = window.request_animation_frame(cb.as_ref().unchecked_ref());
+            cb.forget();
+        }
+    });
+
     // Send message handler
     let do_send = move || {
         let text = input.get();
@@ -1204,6 +1226,10 @@ pub fn App() -> impl IntoView {
                                          set_cloud_panel_open.set(true);
                                          set_models_panel_open.set(false);
                                      }
+                                     on:mouseleave=move |ev: web_sys::MouseEvent| {
+                                         ev.stop_propagation();
+                                         set_cloud_panel_open.set(false);
+                                     }
                                      on:click=move |ev: web_sys::MouseEvent| {
                                          ev.stop_propagation();
                                          set_cloud_panel_open.set(true);
@@ -1215,7 +1241,7 @@ pub fn App() -> impl IntoView {
                                          set_models_panel_open.set(false);
                                      }>
                                     <div class="runner-name">
-                                        "☁️ ollama cloud"
+                                        "ollama cloud"
                                         {move || if cloud_logged_in.get() {
                                             view! { <span class="cloud-badge">"●"</span> }.into_any()
                                         } else {
