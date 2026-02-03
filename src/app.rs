@@ -677,17 +677,23 @@ pub fn App() -> impl IntoView {
 
             // Download progress bars
             <div class="download-progress-container">
-                <For
-                    each=move || active_downloads.get().into_iter().filter(|d| !d.done || d.error.is_some()).collect::<Vec<_>>()
-                    key=|d| d.model.clone()
-                    children=move |download| {
-                        let model_name = download.model.clone();
-                        let model_for_remove = download.model.clone();
+                {move || {
+                    let downloads: Vec<_> = active_downloads.get()
+                        .into_iter()
+                        .filter(|d| !d.done || d.error.is_some())
+                        .collect();
+
+                    downloads.into_iter().map(|dl| {
+                        let model_name = dl.model.clone();
+                        let model_for_remove = dl.model.clone();
+                        let status = dl.status.clone();
+                        let percent = dl.percent;
+
                         view! {
                             <div class="download-progress-bar">
                                 <div class="download-info">
                                     <span class="download-model">{model_name}</span>
-                                    <span class="download-status">{download.status.clone()}</span>
+                                    <span class="download-status">{status}</span>
                                     <button class="download-dismiss"
                                             on:click=move |_| {
                                                 set_active_downloads.update(|downloads| {
@@ -699,13 +705,13 @@ pub fn App() -> impl IntoView {
                                 </div>
                                 <div class="progress-track">
                                     <div class="progress-fill"
-                                         style:width=move || format!("{}%", download.percent)>
+                                         style:width=format!("{}%", percent)>
                                     </div>
                                 </div>
                             </div>
                         }
-                    }
-                />
+                    }).collect_view()
+                }}
             </div>
 
             // Chat window
