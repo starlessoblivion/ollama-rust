@@ -207,6 +207,86 @@ body {
     cursor: wait;
 }
 
+/* Status dropdown */
+.status-dropdown {
+    position: relative;
+}
+
+.status-button {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: white;
+    padding: 0.4rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.status-button:hover {
+    background: rgba(255,255,255,0.25);
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #999;
+}
+
+.status-dot.status-green {
+    background: #2ecc71;
+    box-shadow: 0 0 6px #2ecc71;
+}
+
+.status-dot.status-yellow {
+    background: #f1c40f;
+    box-shadow: 0 0 6px #f1c40f;
+}
+
+.status-dot.status-red {
+    background: #e74c3c;
+    box-shadow: 0 0 6px #e74c3c;
+}
+
+.status-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 0.5rem;
+    min-width: 180px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+    z-index: 1000;
+    color: #111;
+}
+
+.status-menu.hidden {
+    display: none;
+}
+
+.status-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem;
+    border-radius: 6px;
+}
+
+.status-menu-item:hover {
+    background: #f5f5f5;
+}
+
+.status-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
 /* Model dropdown */
 .model-dropdown {
     position: relative;
@@ -500,7 +580,22 @@ body {
     font-weight: 600;
 }
 
-.download-cancel,
+.download-cancel {
+    background: none;
+    border: none;
+    color: #e74c3c;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.9rem;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.download-cancel:hover {
+    background: #fee;
+    color: #c00;
+}
+
 .download-hide {
     background: none;
     border: none;
@@ -509,11 +604,6 @@ body {
     padding: 0.2rem 0.4rem;
     font-size: 0.9rem;
     border-radius: 4px;
-}
-
-.download-cancel:hover {
-    background: #fee;
-    color: #c00;
 }
 
 .download-hide:hover {

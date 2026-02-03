@@ -394,6 +394,7 @@ pub fn App() -> impl IntoView {
     let (new_model_name, set_new_model_name) = signal(String::new());
     let (active_downloads, set_active_downloads) = signal::<Vec<PullProgress>>(vec![]);
     let (deleting_model, set_deleting_model) = signal::<Option<String>>(None);
+    let (status_dropdown_open, set_status_dropdown_open) = signal(false);
 
     // Resources
     let status_resource = Resource::new(|| (), |_| get_ollama_status());
@@ -901,18 +902,46 @@ pub fn App() -> impl IntoView {
                 </div>
 
                 <div class="header-right">
-                    <label class="toggle-switch" title="Toggle Ollama serve">
-                        <input type="checkbox"
-                               id="ollama-toggle"
-                               prop:checked=move || ollama_running.get()
-                               prop:disabled=move || toggle_pending.get()
-                               on:change=move |_| {
-                                   set_toggle_pending.set(true);
-                                   toggle_action.dispatch(());
-                               } />
-                        <span class="slider"></span>
-                    </label>
+                    <div class="status-dropdown">
+                        <button class="status-button"
+                                on:click=move |ev: web_sys::MouseEvent| {
+                                    ev.stop_propagation();
+                                    set_status_dropdown_open.update(|v| *v = !*v);
+                                }>
+                            <span class="status-dot"
+                                  class:status-green=move || ollama_running.get()
+                                  class:status-red=move || !ollama_running.get()
+                                  class:status-yellow=move || toggle_pending.get()>
+                            </span>
+                            "Status"
+                        </button>
+                        <div class="status-menu"
+                             class:hidden=move || !status_dropdown_open.get()
+                             on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()>
+                            <div class="status-menu-item">
+                                <span class="status-label">"Ollama Serve"</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox"
+                                           id="ollama-toggle"
+                                           prop:checked=move || ollama_running.get()
+                                           prop:disabled=move || toggle_pending.get()
+                                           on:change=move |_| {
+                                               set_toggle_pending.set(true);
+                                               toggle_action.dispatch(());
+                                           } />
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+            </div>
+
+            // Backdrop for status dropdown
+            <div class="menu-backdrop"
+                 class:hidden=move || !status_dropdown_open.get()
+                 on:click=move |_| set_status_dropdown_open.set(false)
+                 on:touchend=move |_| set_status_dropdown_open.set(false)>
             </div>
 
             // Download progress bars
@@ -972,7 +1001,7 @@ pub fn App() -> impl IntoView {
                                                             }
                                                         });
                                                     }>
-                                                "⏹"
+                                                "✕"
                                             </button>
                                         }.into_any()
                                     } else {
