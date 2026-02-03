@@ -43,8 +43,30 @@ pub async fn get_ollama_status() -> Result<StatusResponse, ServerFnError> {
 
 #[server]
 pub async fn toggle_ollama_service() -> Result<StatusResponse, ServerFnError> {
-    // This is a placeholder - actual toggle would require system commands
-    // For now, just return current status
+    use std::process::Command;
+
+    // Check current status
+    let current = get_ollama_status().await?;
+
+    if current.running {
+        // Stop Ollama - try pkill first, then killall
+        let _ = Command::new("pkill")
+            .args(["-f", "ollama serve"])
+            .output();
+
+        // Give it a moment to stop
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    } else {
+        // Start Ollama serve in background
+        let _ = Command::new("ollama")
+            .arg("serve")
+            .spawn();
+
+        // Give it a moment to start
+        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    }
+
+    // Return new status
     get_ollama_status().await
 }
 
@@ -77,9 +99,33 @@ pub fn App() -> impl IntoView {
     let (is_streaming, set_is_streaming) = signal(false);
     let (menu_open, set_menu_open) = signal(false);
     let (models_panel_open, set_models_panel_open) = signal(false);
+    let (ollama_running, set_ollama_running) = signal(false);
+    let (toggle_pending, set_toggle_pending) = signal(false);
 
     // Resources
     let status_resource = Resource::new(|| (), |_| get_ollama_status());
+
+    // Toggle action
+    let toggle_action = Action::new(move |_: &()| async move {
+        toggle_ollama_service().await
+    });
+
+    // Update running state when status loads
+    Effect::new(move |_| {
+        if let Some(Ok(status)) = status_resource.get() {
+            set_ollama_running.set(status.running);
+        }
+    });
+
+    // Update running state when toggle completes
+    Effect::new(move |_| {
+        if let Some(Ok(status)) = toggle_action.value().get() {
+            set_ollama_running.set(status.running);
+            set_toggle_pending.set(false);
+            // Refetch models after toggle
+            status_resource.refetch();
+        }
+    });
 
     // Auto-select first model when status loads
     Effect::new(move |_| {
@@ -278,21 +324,16 @@ pub fn App() -> impl IntoView {
                 <div class="chat-title">"🧠"</div>
 
                 <div class="header-right">
-                    <label class="toggle-switch" title="Ollama Status">
-                        <Suspense fallback=move || view! { <input type="checkbox" disabled=true /> }>
-                            {move || {
-                                status_resource.get().map(|result| {
-                                    let running = result.map(|s| s.running).unwrap_or(false);
-                                    view! {
-                                        <input type="checkbox"
-                                               id="ollama-toggle"
-                                               prop:checked=running
-                                               disabled=true />
-                                        <span class="slider"></span>
-                                    }
-                                })
-                            }}
-                        </Suspense>
+                    <label class="toggle-switch" title="Toggle Ollama serve">
+                        <input type="checkbox"
+                               id="ollama-toggle"
+                               prop:checked=move || ollama_running.get()
+                               prop:disabled=move || toggle_pending.get()
+                               on:change=move |_| {
+                                   set_toggle_pending.set(true);
+                                   toggle_action.dispatch(());
+                               } />
+                        <span class="slider"></span>
                     </label>
                 </div>
             </div>
