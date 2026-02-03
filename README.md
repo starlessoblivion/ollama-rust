@@ -26,29 +26,6 @@ The installer handles all dependencies, builds the project, and creates a deskto
 - RHEL / CentOS / Rocky / AlmaLinux
 - openSUSE
 
-## Manual Installation
-
-```bash
-# Install dependencies (example for Debian/Ubuntu)
-sudo apt install git curl build-essential pkg-config libssl-dev
-
-# Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source ~/.cargo/env
-
-# Add WASM target and cargo-leptos
-rustup target add wasm32-unknown-unknown
-cargo install cargo-leptos --locked
-
-# Clone and build
-git clone https://github.com/starlessoblivion/ollama-rust.git
-cd ollama-rust
-cargo leptos build --release
-
-# Run
-./target/release/ollama-rust
-```
-
 ## Usage
 
 1. Start the server: `~/ollama-rust/run.sh`
