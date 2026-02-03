@@ -81,7 +81,15 @@ install_rust() {
     if command -v rustc &> /dev/null; then
         print_warning "Found rustc $(rustc --version) but no rustup"
         print_warning "rustup is required to add the WASM target"
-        print_status "Installing rustup alongside existing rust..."
+
+        if [ "$IS_TERMUX" = true ]; then
+            # On Termux, pkg rust conflicts with rustup - must remove it
+            print_status "Removing pkg rust (incompatible with WASM targets)..."
+            pkg uninstall -y rust 2>/dev/null || true
+            hash -r  # Clear command cache
+        fi
+
+        print_status "Installing rustup..."
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
         if [ -f "$HOME/.cargo/env" ]; then
             source "$HOME/.cargo/env"
