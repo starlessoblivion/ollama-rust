@@ -656,7 +656,7 @@ pub fn App() -> impl IntoView {
                                                         Ok(status) => {
                                                             if status.models.is_empty() {
                                                                 view! {
-                                                                    <div class="no-models">"No models installed"</div>
+                                                                    <div class="no-models">"Turn on Ollama to view installed models"</div>
                                                                 }.into_any()
                                                             } else {
                                                                 view! {
