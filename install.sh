@@ -46,9 +46,16 @@ install_dependencies() {
     print_status "Installing dependencies..."
 
     if [ "$IS_TERMUX" = true ]; then
-        # Termux - install base deps, rust via rustup later
+        # Termux - install base deps only (rust via rustup later)
         pkg update -y
         pkg install -y git openssl pkg-config binutils
+
+        # Check if pkg rust is installed (it doesn't have rustup)
+        if command -v rustc &> /dev/null && ! command -v rustup &> /dev/null; then
+            print_warning "Detected pkg rust (no rustup support)"
+            print_status "Removing pkg rust to install rustup version..."
+            pkg uninstall -y rust
+        fi
     elif command -v apt-get &> /dev/null; then
         # Debian/Ubuntu
         sudo apt-get update
@@ -68,24 +75,36 @@ install_dependencies() {
 
 # Install Rust via rustup
 install_rust() {
-    if ! command -v rustup &> /dev/null; then
-        print_status "Installing Rust via rustup..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-
-        # Source cargo env
-        if [ -f "$HOME/.cargo/env" ]; then
-            source "$HOME/.cargo/env"
-        fi
-
-        print_success "Rust installed via rustup"
-    else
-        print_success "Rustup already installed: $(rustc --version)"
-    fi
-
-    # Ensure cargo env is sourced
+    # Source cargo env first if it exists
     if [ -f "$HOME/.cargo/env" ]; then
         source "$HOME/.cargo/env"
     fi
+
+    # Check if rustup is available
+    if command -v rustup &> /dev/null; then
+        print_success "Rustup already installed: $(rustc --version)"
+        return
+    fi
+
+    # Check if rustc exists without rustup (pkg install rust)
+    if command -v rustc &> /dev/null; then
+        print_warning "Found rustc but no rustup - WASM target cannot be added"
+        print_warning "Please uninstall pkg rust and re-run:"
+        print_warning "  pkg uninstall rust"
+        print_warning "  Then re-run this installer"
+        exit 1
+    fi
+
+    # Install rustup
+    print_status "Installing Rust via rustup..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+
+    # Source cargo env
+    if [ -f "$HOME/.cargo/env" ]; then
+        source "$HOME/.cargo/env"
+    fi
+
+    print_success "Rust installed via rustup"
 }
 
 # Install cargo-leptos
