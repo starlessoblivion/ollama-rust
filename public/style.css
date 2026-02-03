@@ -493,6 +493,16 @@ body {
     font-weight: 500;
     margin-right: 0.5rem;
     min-width: 60px;
+    display: inline-block;
+}
+
+.download-speed.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 .download-dismiss {

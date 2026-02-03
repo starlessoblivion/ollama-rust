@@ -808,6 +808,8 @@ pub fn App() -> impl IntoView {
                                     <span class="download-status">{status}</span>
                                     {if !speed.is_empty() {
                                         view! { <span class="download-speed">{speed}</span> }.into_any()
+                                    } else if status == "Downloading..." {
+                                        view! { <span class="download-speed spinning">⟳</span> }.into_any()
                                     } else {
                                         view! { <></> }.into_any()
                                     }}
