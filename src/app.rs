@@ -1058,7 +1058,6 @@ pub fn App() -> impl IntoView {
                         let is_complete = status_for_check == "Complete";
                         let is_cancelled = status_for_check == "Cancelled";
                         let can_cancel = !is_done && !is_complete && !is_cancelled;
-                        let percent_display = format!("{:.0}%", percent);
 
                         view! {
                             <div class="download-progress-bar">
@@ -1070,8 +1069,6 @@ pub fn App() -> impl IntoView {
                                     </span>
                                     {if !speed.is_empty() {
                                         view! { <span class="download-speed">{speed}</span> }.into_any()
-                                    } else if !is_complete && percent > 0.0 {
-                                        view! { <span class="download-speed">{percent_display}</span> }.into_any()
                                     } else {
                                         view! { <></> }.into_any()
                                     }}
