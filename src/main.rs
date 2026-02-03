@@ -22,7 +22,7 @@ async fn main() {
     .with_state(leptos_options);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    logging::log!("listening on http://{}", &addr);
+    leptos::logging::log!("listening on http://{}", &addr);
     axum::serve(listener, app).await.unwrap();
 }
 
@@ -36,22 +36,22 @@ pub struct PromptRequest {
 #[cfg(feature = "ssr")]
 async fn stream_handler(
     axum::extract::State(_state): axum::extract::State<leptos::prelude::LeptosOptions>,
-                        axum::Json(payload): axum::Json<PromptRequest>,
-) -> axum::response::sse::Sse<impl futures::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>> {
+    axum::Json(payload): axum::Json<PromptRequest>,
+) -> axum::response::sse::Sse<std::pin::Pin<Box<dyn futures::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>> + Send>>> {
     use futures::StreamExt;
     use tokio_util::codec::{FramedRead, LinesCodec};
     use tokio_util::io::StreamReader;
 
     let client = reqwest::Client::new();
     let res = client
-    .post("http://localhost:11434/api/generate")
-    .json(&serde_json::json!({
-        "model": payload.model,
-        "prompt": payload.prompt,
-        "stream": true
-    }))
-    .send()
-    .await;
+        .post("http://localhost:11434/api/generate")
+        .json(&serde_json::json!({
+            "model": payload.model,
+            "prompt": payload.prompt,
+            "stream": true
+        }))
+        .send()
+        .await;
 
     match res {
         Ok(response) => {
@@ -73,13 +73,13 @@ async fn stream_handler(
                     }
                 }
             };
-            axum::response::sse::Sse::new(stream)
+            axum::response::sse::Sse::new(Box::pin(stream))
         }
         Err(_) => {
             let error_stream = futures::stream::once(async {
                 Ok(axum::response::sse::Event::default().data("[Error: Ollama not reachable]"))
             });
-            axum::response::sse::Sse::new(error_stream)
+            axum::response::sse::Sse::new(Box::pin(error_stream))
         }
     }
 }

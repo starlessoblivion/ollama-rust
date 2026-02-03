@@ -1,6 +1,6 @@
 use leptos::prelude::*;
+use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use serde::{Deserialize, Serialize};
-use wasm_bindgen::prelude::*;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StatusResponse {
@@ -29,8 +29,27 @@ pub async fn toggle_ollama_service() -> Result<StatusResponse, ServerFnError> {
     Ok(StatusResponse { status: "Toggled".to_string() })
 }
 
+pub fn shell(options: LeptosOptions) -> impl IntoView {
+    view! {
+        <!DOCTYPE html>
+        <html lang="en">
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                <AutoReload options=options.clone() />
+                <HydrationScripts options/>
+                <MetaTags/>
+            </head>
+            <body>
+                <App/>
+            </body>
+        </html>
+    }
+}
+
 #[component]
 pub fn App() -> impl IntoView {
+    provide_meta_context();
     let (input, set_input) = signal(String::new());
     let (messages, _set_messages) = signal(Vec::<ChatMessage>::new());
     let (selected_model, _set_selected_model) = signal(Some("llama3".to_string()));
@@ -45,6 +64,8 @@ pub fn App() -> impl IntoView {
     };
 
     view! {
+        <Stylesheet id="leptos" href="/pkg/ollama-rust.css"/>
+        <Title text="Ollama Rust"/>
         <div class="chat-container">
         <header class="chat-header">
         <span>
