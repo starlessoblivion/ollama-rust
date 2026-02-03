@@ -35,6 +35,10 @@
     --warning: #f1c40f;
     --error: #e74c3c;
 
+    --model-btn-bg: #fff;
+    --model-btn-text: #001f3f;
+    --model-btn-hover: #f0f0f0;
+
     --font-family: 'Segoe UI', system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -68,6 +72,10 @@
 
     --shadow: rgba(0,0,0,0.3);
     --shadow-menu: rgba(0,0,0,0.4);
+
+    --model-btn-bg: #5aa0e5;
+    --model-btn-text: #fff;
+    --model-btn-hover: #6ab0ff;
 }
 
 [data-theme="amoled"] {
@@ -100,6 +108,10 @@
 
     --shadow: rgba(255,255,255,0.05);
     --shadow-menu: rgba(255,255,255,0.1);
+
+    --model-btn-bg: #1a73e8;
+    --model-btn-text: #fff;
+    --model-btn-hover: #4a9fff;
 }
 
 [data-theme="hacker"] {
@@ -136,6 +148,10 @@
     --success: #00ff00;
     --warning: #ffff00;
     --error: #ff0000;
+
+    --model-btn-bg: #00ff00;
+    --model-btn-text: #000;
+    --model-btn-hover: #00cc00;
 
     --font-family: 'Courier New', 'Consolas', monospace;
 }
@@ -174,6 +190,10 @@
     --success: #a3be8c;
     --warning: #ebcb8b;
     --error: #bf616a;
+
+    --model-btn-bg: #88c0d0;
+    --model-btn-text: #2e3440;
+    --model-btn-hover: #8fbcbb;
 }
 
 /* ===== LAYOUT VARIABLES ===== */
@@ -534,8 +554,8 @@ body {
 }
 
 #model-button {
-    background: white;
-    color: var(--accent);
+    background: var(--model-btn-bg);
+    color: var(--model-btn-text);
     border: none;
     padding: 0.5rem 0.75rem;
     border-radius: 10px;
@@ -549,10 +569,13 @@ body {
     max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
+    transition: transform 0.15s, box-shadow 0.15s;
 }
 
 #model-button:hover {
-    background: #f0f0f0;
+    background: var(--model-btn-hover);
+    transform: scale(1.02);
+    box-shadow: 0 2px 8px var(--shadow);
 }
 
 /* Model menu */
