@@ -1,12 +1,12 @@
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
-    // Ensure this matches the 'name' field in your Cargo.toml
     use ollama_rust::app::*;
     use axum::routing::post;
     use axum::Router;
     use leptos::prelude::*;
     use leptos_axum::{generate_route_list, LeptosRoutes};
+    use tower_http::services::ServeDir;
 
     let conf = get_configuration(None).unwrap();
     let addr = conf.leptos_options.site_addr;
@@ -14,12 +14,13 @@ async fn main() {
     let routes = generate_route_list(App);
 
     let app = Router::new()
-    .route("/api/stream", post(stream_handler))
-    .leptos_routes(&leptos_options, routes, {
-        let leptos_options = leptos_options.clone();
-        move || shell(leptos_options.clone())
-    })
-    .with_state(leptos_options);
+        .route("/api/stream", post(stream_handler))
+        .nest_service("/pkg", ServeDir::new(format!("{}/pkg", &leptos_options.site_root)).append_index_html_on_directories(false))
+        .leptos_routes(&leptos_options, routes, {
+            let leptos_options = leptos_options.clone();
+            move || shell(leptos_options.clone())
+        })
+        .with_state(leptos_options);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     leptos::logging::log!("listening on http://{}", &addr);
